@@ -193,6 +193,38 @@ static void fillTightStringWithString(TightString * tString,
 //
 // Creates a tightString from an array of normal strings
 //
+#ifdef OPENMP
+TightString *newTightStringArrayFromStringArray(char **sequences,
+						IDnum sequenceCount,
+						char **tSeqMem)
+{
+	IDnum sequenceIndex;
+	TightString *tStringArray = mallocOrExit(sequenceCount, TightString);
+	size_t *offsets = mallocOrExit(sequenceCount, size_t);
+	Coordinate totalLength = 0;
+	int arrayLength;
+
+	for (sequenceIndex = 0; sequenceIndex < sequenceCount; sequenceIndex++)
+	{
+		offsets[sequenceIndex] = totalLength;
+		tStringArray[sequenceIndex].length = strlen (sequences[sequenceIndex]);
+		arrayLength = tStringArray[sequenceIndex].length / 4;
+		if (tStringArray[sequenceIndex].length % 4 > 0)
+			arrayLength++;
+		totalLength += arrayLength;
+	}
+	*tSeqMem = callocOrExit (totalLength, char);
+	#pragma omp parallel for
+	for (sequenceIndex = 0; sequenceIndex < sequenceCount; sequenceIndex++)
+		fillTightStringWithString (&tStringArray[sequenceIndex],
+					   sequences[sequenceIndex],
+					   (Codon*)((*tSeqMem) + offsets[sequenceIndex]));
+
+	free(offsets);
+	free(sequences);
+	return tStringArray;
+}
+#else
 TightString *newTightStringArrayFromStringArray(char **sequences,
 						IDnum sequenceCount,
 						char **tSeqMem)
@@ -227,6 +259,7 @@ TightString *newTightStringArrayFromStringArray(char **sequences,
 	free(sequences);
 	return tStringArray;
 }
+#endif
 
 char readNucleotide(Nucleotide nucleotide)
 {
