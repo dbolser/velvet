@@ -46,9 +46,7 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 ReadSet *newReadSet()
 {
 	ReadSet *rs = callocOrExit(1, ReadSet);
-	int i;
-	for (i = 0; i < CATEGORIES; i++)
-		rs->categoriesOffsets[i] = -1;
+
 	return rs;
 }
 
@@ -1761,6 +1759,42 @@ boolean pairUpReads(ReadSet * reads, Category cat)
 	return found;
 }
 
+
+static void computeSecondInPair(ReadSet * reads)
+{
+	IDnum index;
+	Category currentCat = 0;
+	Category previousCat = 0;
+	int phase = 0;
+
+	if (reads->secondInPair)
+		free (reads->secondInPair);
+	reads->secondInPair = callocOrExit((reads->readCount + 7) / 8, char);
+
+	for (index = 0; index < reads->readCount; index++)
+	{
+		currentCat = reads->categories[index];
+		if (currentCat & 1)
+		{
+			if (previousCat == currentCat)
+			{
+				if (phase == 0)
+				{
+					phase = 1;
+				}
+				else
+				{
+					reads->secondInPair[index / 8] |= (1 << (index & 7));
+					phase = 0;
+				}
+			}
+			else
+				phase = 0;
+		}
+		previousCat = currentCat;
+	}
+}
+
 void detachDubiousReads(ReadSet * reads, boolean * dubiousReads)
 {
 	IDnum index;
@@ -1870,6 +1904,7 @@ ReadSet *importReadSet(char *filename)
 
 	reads->sequences = callocOrExit(sequenceCount, char *);
 	reads->categories = callocOrExit(sequenceCount, Category);
+
 	// Counting base pair length of each sequence:
 	file = fopen(filename, "r");
 	sequenceIndex = -1;
@@ -1880,8 +1915,6 @@ ReadSet *importReadSet(char *filename)
 			sscanf(line, "%*[^\t]\t%*[^\t]\t%hd",
 			       &temp_short);
 			reads->categories[sequenceIndex + 1] = (Category) temp_short;
-			if (reads->categoriesOffsets[temp_short] < 0)
-				reads->categoriesOffsets[temp_short] = sequenceIndex;
 
 			if (sequenceIndex != -1)
 				reads->sequences[sequenceIndex] =
@@ -1925,6 +1958,7 @@ ReadSet *importReadSet(char *filename)
 
 	sequence[bpCount] = '\0';
 	fclose(file);
+	computeSecondInPair(reads);
 
 	velvetLog("Done\n");
 	return reads;

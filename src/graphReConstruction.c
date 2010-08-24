@@ -1025,10 +1025,7 @@ static void fillUpGraph(ReadSet * reads,
 					  	refCount, &file,
 						second_in_pair);
 
-		if (category % 2) 
-			second_in_pair = (second_in_pair? false : true);
-		else 
-			second_in_pair = false;
+		second_in_pair = isSecondInPair(reads->secondInPair, readIndex);
 	}
 
 	createNodeReadStartArrays(graph);
@@ -1055,10 +1052,7 @@ static void fillUpGraph(ReadSet * reads,
 					   referenceMappings, referenceMappingCount,
 					   refCount, &file, second_in_pair);
 
-		if (category % 2) 
-			second_in_pair = (second_in_pair? false : true);
-		else 
-			second_in_pair = false;
+		second_in_pair = isSecondInPair(reads->secondInPair, readIndex);
 	}
 
 	orderNodeReadStartArrays(graph);

@@ -30,9 +30,11 @@ struct readSet_st {
 	Probability **kmerProbabilities;
 	IDnum *mateReads;
 	Category *categories;
-	IDnum categoriesOffsets[CATEGORIES];
+	unsigned char *secondInPair;
 	IDnum readCount;
 };
+
+#define isSecondInPair(secondInPair, idx) (secondInPair[(idx) / 8] & (1 << ((idx) & 7)))
 
 ReadSet *newReadSet();
 ReadSet *newReadSetAroundTightStringArray(TightString ** array,

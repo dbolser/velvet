@@ -757,8 +757,6 @@ void inputSequenceArrayIntoSplayTableAndArchive(ReadSet * reads,
 	#pragma omp parallel for
 #endif
 	for (index = 0; index < sequenceCount; index++) {
-		const Category category = reads->categories[index];
-
 		// Prorgess report on screen
 		if (index % 1000000 == 0) {
 			velvetLog("Inputting sequence %d / %d\n", index,
@@ -783,10 +781,7 @@ void inputSequenceArrayIntoSplayTableAndArchive(ReadSet * reads,
 			exit(0);
 		}
 
-		if (category % 2)
-			second_in_pair = (index - reads->categoriesOffsets[category]) % 2;
-		else 
-			second_in_pair = false;
+		second_in_pair = isSecondInPair(reads->secondInPair, index);
 
 		// Hashing the reads
 		if (reads->categories[index] == REFERENCE)
