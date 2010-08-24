@@ -781,7 +781,7 @@ void inputSequenceArrayIntoSplayTableAndArchive(ReadSet * reads,
 			exit(0);
 		}
 
-		second_in_pair = isSecondInPair(reads->secondInPair, index);
+		second_in_pair = reads->categories[index] % 2 && isSecondInPair(reads->secondInPair, index);
 
 		// Hashing the reads
 		if (reads->categories[index] == REFERENCE)
