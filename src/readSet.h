@@ -34,8 +34,6 @@ struct readSet_st {
 	IDnum readCount;
 };
 
-#define isSecondInPair(secondInPair, idx) (secondInPair[(idx) / 8] & (1 << ((idx) & 7)))
-
 ReadSet *newReadSet();
 ReadSet *newReadSetAroundTightStringArray(TightString ** array,
 					  IDnum length);
@@ -65,7 +63,8 @@ void logInstructions(int argc, char **argv, char *directory);
 
 // Read pairing info
 void createReadPairingArray(ReadSet* reads);
-boolean pairedCategories(ReadSet * reads, Category cat);
+int pairedCategories(ReadSet * reads);
+boolean isSecondInPair(ReadSet * reads, IDnum index);
 void detachDubiousReads(ReadSet * reads, boolean * dubiousReads);
 
 void destroyReadSet(ReadSet * reads);

@@ -1749,7 +1749,12 @@ int pairedCategories(ReadSet * reads)
 		} 	
 	}
 
-	return paireCatCount;
+	return pairedCatCount;
+}
+
+boolean isSecondInPair(ReadSet * reads, IDnum index)
+{
+	return reads->secondInPair[index / 8] & (1 << (index & 7));
 }
 
 
@@ -1802,13 +1807,13 @@ void detachDubiousReads(ReadSet * reads, boolean * dubiousReads)
 		if (!dubiousReads[index] || reads->categories[index] % 2 == 0 )
 			continue;
 
-		if (isSecondInPair(reads->secondInPair, index))
+		if (isSecondInPair(reads, index))
 		    pairID = index - 1;
 		else
 		    pairID = index + 1;
 
 		reads->categories[index] = (reads->categories[index] % 2) * 2;
-		reads->categories[pairID] = (reads->categories[categories] % 2) * 2;
+		reads->categories[pairID] = (reads->categories[pairID] % 2) * 2;
 	}
 }
 
