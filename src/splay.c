@@ -54,10 +54,7 @@ void initSplayTreeMemory(void)
 	n = omp_get_max_threads();
 	#pragma omp critical
 	if (treeMemory == NULL)
-	{
-		printf ("Allocated thread-specific RecycleBin: %d\n", n);
 		treeMemory = newRecycleBinArray(n, sizeof(SplayNode), CHUNKSIZE);
-	}
 }
 #endif
 
@@ -67,8 +64,8 @@ static SplayNode *allocateSplayNode()
 #if DEBUG
 	if (treeMemory == NULL)
 	{
-		puts("The memory for splay trees seems uninitialised, "
-		     "this is probably a bug, aborting.\n");
+		velvetLog("The memory for splay trees seems uninitialised, "
+			  "this is probably a bug, aborting.\n");
 		abort();
 	}
 #endif

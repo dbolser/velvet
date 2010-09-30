@@ -18,10 +18,15 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
+
+#ifdef OPENMP
+#include <omp.h>
+#endif
 
 #include "globals.h"
 #include "graph.h"
@@ -38,6 +43,86 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #define GUANINE 2
 #define THYMINE 3
 
+
+//////////////////////////////////////////////////////////
+// Node Locking
+//////////////////////////////////////////////////////////
+
+#ifdef OPENMP
+
+/* Array of per-node locks */
+
+static omp_lock_t *nodeLocks = NULL;
+
+static void
+createNodeLocks(Graph *graph)
+{
+	IDnum nbNodes;
+	IDnum nodeIndex;
+
+	nbNodes = nodeCount(graph) + 1;
+	if (nodeLocks)
+		free (nodeLocks);
+	nodeLocks = mallocOrExit(nbNodes, omp_lock_t);
+
+	#pragma omp parallel for
+	for (nodeIndex = 0; nodeIndex < nbNodes; nodeIndex++)
+		omp_init_lock(nodeLocks + nodeIndex);
+}
+
+/* Array of per-node owner thread
+ *
+ * SF TODO int is probably an overkill, we could have a MAX_THREAD compilation
+ * option that determines the size of this field
+ */
+
+static int *ownerThreads = NULL;
+
+static void
+createOwnerThreads(Graph *graph)
+{
+	IDnum nbNodes;
+	IDnum nodeIndex;
+
+	nbNodes = nodeCount(graph) + 1;
+	if (ownerThreads)
+		free (ownerThreads);
+	ownerThreads = mallocOrExit(nbNodes, int);
+
+	#pragma omp parallel for
+	for (nodeIndex = 0; nodeIndex < nbNodes; nodeIndex++)
+		ownerThreads[nodeIndex] = -1;
+}
+
+static inline void lockNode(Node *node)
+{
+	const int thisThread = omp_get_thread_num();
+	IDnum nodeID = getNodeID(node);
+	int ownerThread;
+
+	if (nodeID < 0)
+		nodeID = -nodeID;
+	ownerThread = ownerThreads[nodeID];
+	if (ownerThread != thisThread)
+	{
+		omp_set_lock (nodeLocks + nodeID);
+		ownerThreads[nodeID] = thisThread;
+	}
+}
+
+/* Assumes that the current thread is the owner of this node */
+static inline void unLockNode(Node *node)
+{
+	IDnum nodeID = getNodeID(node);
+
+	if (nodeID < 0)
+		nodeID = -nodeID;
+	ownerThreads[nodeID] = -1;
+	omp_unset_lock (nodeLocks + nodeID);
+}
+
+#endif
+
 //////////////////////////////////////////////////////////
 // Node Lists
 //////////////////////////////////////////////////////////
@@ -49,42 +134,110 @@ struct smallNodeList_st {
 } ATTRIBUTE_PACKED;
 
 static RecycleBin *smallNodeListMemory = NULL;
+
+/*
+ * SF TODO Should reduce the number of calls to omp_get_thread_num
+ * This should be fairly simple, significantly cleaner and marginally faster
+ */
+
+#ifdef OPENMP
+static SmallNodeList **nodePile = NULL;
+#else
 static SmallNodeList *nodePile = NULL;
+#endif
 
 #define BLOCKSIZE 1000
 
+#ifdef OPENMP
+static void initSmallNodeListMemory(void)
+{
+	int n;
+	int i;
+
+	n = omp_get_max_threads();
+	#pragma omp critical
+	{
+		if (smallNodeListMemory == NULL)
+			smallNodeListMemory = newRecycleBinArray(n, sizeof(SmallNodeList), BLOCKSIZE);
+		if (nodePile == NULL)
+			nodePile = mallocOrExit (n, SmallNodeList*);
+		for (i = 0; i < n; i++)
+			nodePile[i] = NULL;
+	}
+}
+#endif
+
 static SmallNodeList *allocateSmallNodeList()
 {
+#ifdef OPENMP
+#if DEBUG
 	if (smallNodeListMemory == NULL)
-		smallNodeListMemory =
-		    newRecycleBin(sizeof(SmallNodeList), BLOCKSIZE);
+	{
+		velvetLog("The memory for small nodes seems uninitialised, "
+			  "this is probably a bug, aborting.\n");
+		abort();
+	}
+#endif
+	return allocatePointer(getRecycleBinInArray(smallNodeListMemory,
+						    omp_get_thread_num()));
+#else
+	if (smallNodeListMemory == NULL)
+		smallNodeListMemory = newRecycleBin(sizeof(SmallNodeList), BLOCKSIZE);
 
 	return allocatePointer(smallNodeListMemory);
+#endif
 }
 
 static void deallocateSmallNodeList(SmallNodeList * smallNodeList)
 {
+#ifdef OPENMP
+	deallocatePointer(getRecycleBinInArray(smallNodeListMemory,
+					       omp_get_thread_num()),
+			  smallNodeList);
+#else
 	deallocatePointer(smallNodeListMemory, smallNodeList);
+#endif
 }
 
 static void memorizeNode(Node * node)
 {
 	SmallNodeList *list = allocateSmallNodeList();
 	list->node = node;
+#ifdef OPENMP
+	int n = omp_get_thread_num();
+	list->next = nodePile[n];
+	nodePile[n] = list;
+#else
 	list->next = nodePile;
 	nodePile = list;
+#endif
 }
 
 static void unlockMemorizedNodes()
 {
 	SmallNodeList *list;
 
-	while (nodePile) {
+#ifdef OPENMP
+	int n = omp_get_thread_num();
+	while (nodePile[n])
+	{
+		Node *node = nodePile[n]->node;
+
+		setSingleNodeStatus(node, false);
+		unLockNode(node);
+		list = nodePile[n];
+		nodePile[n] = list->next;
+		deallocateSmallNodeList(list);
+	}
+#else
+	while (nodePile)
+	{
 		list = nodePile;
 		nodePile = list->next;
 		setSingleNodeStatus(list->node, false);
 		deallocateSmallNodeList(list);
 	}
+#endif
 }
 
 ///////////////////////////////////////////////////////////
@@ -502,13 +655,13 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 	Node *node;
 	Node *previousNode = NULL;
 
-	clearKmer(&word);
-	clearKmer(&antiWord);
-
 	// Neglect any read which will not be short paired
 	if ((!readTracking && category % 2 == 0)
 	    || category / 2 >= CATEGORIES)
 		return;
+
+	clearKmer(&word);
+	clearKmer(&antiWord);
 
 	// Get initial annotation
 	if (*rdmapFile) {
@@ -605,7 +758,7 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 				refCoord = annotStart + annotIndex;
 			else
 				refCoord = annotStart - annotIndex;
-			
+
 			refMap = findReferenceMapping(refID, refCoord, referenceMappings, referenceMappingCount);
 			// If success
 			if (refMap) {
@@ -618,7 +771,7 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 				if (previousNode)
 					break;
 			}
-		}		
+		}
 		// if not.. look in table
 		else {
 			reversed = false;
@@ -667,10 +820,16 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 		previousNode = node;
 
 		// Fill in graph
-		if (node && !getNodeStatus(node)) {
-			incrementReadStartCount(node, graph);
-			setSingleNodeStatus(node, true);
-			memorizeNode(node);
+		if (node)
+		{
+#ifdef OPENMP
+			lockNode(node);
+#endif
+			if (!getNodeStatus(node)) {
+				incrementReadStartCount(node, graph);
+				setSingleNodeStatus(node, true);
+				memorizeNode(node);
+			}
 		}
 	}
 
@@ -707,7 +866,7 @@ static void threadSequenceThroughGraph(TightString * tString,
 
 	PassageMarkerI marker = NULL_IDX;
 	PassageMarkerI previousMarker = NULL_IDX;
-	Node *node;
+	Node *node = NULL;
 	Node *previousNode = NULL;
 	Coordinate coord = 0;
 	Coordinate previousCoord = 0;
@@ -909,6 +1068,9 @@ static void threadSequenceThroughGraph(TightString * tString,
 
 		// Fill in graph
 		if (node) {
+#ifdef OPENMP
+			lockNode(node);
+#endif
 			kmerIndex = readNucleotideIndex - wordLength;
 
 			if (previousNode == node
@@ -930,6 +1092,10 @@ static void threadSequenceThroughGraph(TightString * tString,
 
 			} else {
 				if (category / 2 >= CATEGORIES) {
+#ifdef OPENMP
+					/* SF TODO should lock at the allocator level */
+					#pragma omp critical
+#endif
 					marker =
 					    newPassageMarker(seqID,
 							     kmerIndex,
@@ -968,17 +1134,37 @@ static void threadSequenceThroughGraph(TightString * tString,
 					    (node, category / 2, 1);
 				}
 
+#ifdef OPENMP
+				/* SF TODO should lock at the allocator level */
+				#pragma omp critical
+#endif
 				createArc(previousNode, node, graph);
 			}
+
+#ifdef OPENMP
+			if ((!readTracking || (category / 2 >= CATEGORIES))
+			    && (previousNode != NULL && previousNode != node))
+				unLockNode(previousNode);
+#endif
 
 			previousNode = node;
 			previousCoord = coord;
 		}
-
 		index++;
 	}
 
-	unlockMemorizedNodes();
+	if (readTracking && category / 2 < CATEGORIES)
+		unlockMemorizedNodes();
+#ifdef OPENMP
+	else
+	{
+		if (previousNode != NULL && previousNode != node)
+			unLockNode(previousNode);
+		if (node != NULL)
+			unLockNode(node);
+	}
+#endif
+
 	if (*rdmapFile) {
 		while (line[0] != 'R') {
 			if (!fgets(line, MAXLINE, *rdmapFile)) {
@@ -1004,6 +1190,11 @@ static void fillUpGraph(ReadSet * reads,
 	boolean second_in_pair = false;
 	
 	if (referenceMappings) {
+#ifdef OPENMP
+		velvetLog("Can't handle reference mapping in parallel mode ... yet. "
+			  "Aborting (sorry)\n");
+		abort();
+#endif
 		file = fopen(roadmapFilename, "r");
 		for (readIndex = 0; readIndex < refCount + 1; readIndex++)
 			while(fgets(line, MAXLINE, file))
@@ -1013,6 +1204,13 @@ static void fillUpGraph(ReadSet * reads,
 
 	resetNodeStatus(graph);
 
+#ifdef OPENMP
+	initSmallNodeListMemory();
+	createNodeLocks(graph);
+	createOwnerThreads(graph);
+
+	#pragma omp parallel for
+#endif
 	for (readIndex = 0; readIndex < reads->readCount; readIndex++) {
 		category = reads->categories[readIndex];
 	
@@ -1038,6 +1236,9 @@ static void fillUpGraph(ReadSet * reads,
 	}
 
 	second_in_pair = false;
+#ifdef OPENMP
+	#pragma omp parallel for
+#endif
 	for (readIndex = 0; readIndex < reads->readCount; readIndex++) {
 		category = reads->categories[readIndex];
 	
@@ -1054,13 +1255,26 @@ static void fillUpGraph(ReadSet * reads,
 
 		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 	}
+#ifdef OPENMP
+	free(nodeLocks);
+	nodeLocks = NULL;
+	free(ownerThreads);
+	ownerThreads = NULL;
+#endif
 
 	orderNodeReadStartArrays(graph);
 
 	if (smallNodeListMemory != NULL)
+#ifdef OPENMP
+	{
+		destroyRecycleBinArray(smallNodeListMemory);
+		free (nodePile);
+	}
+#else
 		destroyRecycleBin(smallNodeListMemory);
+#endif
 
-	if (file) 
+	if (file)
 		fclose(file);
 	destroyKmerOccurenceTable(kmerTable);
 }

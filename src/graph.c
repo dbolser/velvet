@@ -54,8 +54,8 @@ struct node_st {
 	IDnum originalVirtualCoverage[CATEGORIES];	// 32 * 2
 	IDnum ID;		// 32
 	IDnum arcCount;		// 32
-	boolean status;		// 1
-	boolean uniqueness;	// 1
+	boolean status;		// 8
+	boolean uniqueness;	// 8
 } ATTRIBUTE_PACKED;	// 418 Total
 
 struct shortReadMarker_st {
@@ -1665,7 +1665,6 @@ Node *emptyNode()
 	antiNode->twinNode = newnd;
 
 	return newnd;
-
 }
 
 Node *addEmptyNodeToGraph(Graph * graph, IDnum ID)
