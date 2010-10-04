@@ -23,6 +23,10 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #include <time.h>
 #include <math.h>
 
+#ifdef OPENMP
+#include <omp.h>
+#endif
+
 #include "globals.h"
 #include "graph.h"
 #include "concatenatedGraph.h"
@@ -676,12 +680,21 @@ static void createConnection(IDnum nodeID, IDnum node2ID,
 {
 	Connection *connect = findConnection(nodeID, node2ID);
 
+#ifdef OPENMP
+	#pragma omp critical
+	{
+#endif
+
 	if (connect != NULL)
 		readjustConnection(connect, distance, variance,
 				   direct_count, paired_count);
 	else
 		createNewConnection(nodeID, node2ID, direct_count,
 				    paired_count, distance, variance);
+
+#ifdef OPENMP
+	}
+#endif
 }
 
 static void projectFromSingleRead(Node * node,
@@ -694,6 +707,9 @@ static void projectFromSingleRead(Node * node,
 	double variance = 1;
 
 	if (target == getTwinNode(node) || target == node)
+		return;
+
+	if (getUniqueness(target) && getNodeID(target) < getNodeID(node))
 		return;
 
 	if (position < 0) {
@@ -959,6 +975,9 @@ static Connection **computeNodeToNodeMappings(ReadOccurence ** readNodes,
 
 	velvetLog("Computing direct node to node mappings\n");
 
+#ifdef OPENMP
+	#pragma omp parallel for
+#endif
 	for (nodeID = -nodes; nodeID <= nodes; nodeID++) {
 		if (nodeID % 10000 == 0)
 			velvetLog("Scaffolding node %d\n", nodeID);
