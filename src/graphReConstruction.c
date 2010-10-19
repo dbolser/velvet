@@ -23,6 +23,10 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #include <string.h>
 #include <limits.h>
 
+#ifdef OPENMP
+#include <omp.h>
+#endif
+
 #include "globals.h"
 #include "graph.h"
 #include "passageMarker.h"
@@ -78,7 +82,7 @@ static boolean nodeMemorized(Node * node, SmallNodeList * nodePile) {
 	SmallNodeList * list;
 
 	for (list = nodePile; list; list = list->next)
-		if (list->node = node)
+		if (list->node == node)
 			return true;
 
 	return false;
@@ -86,6 +90,8 @@ static boolean nodeMemorized(Node * node, SmallNodeList * nodePile) {
 
 static void unlockMemorizedNodes(SmallNodeList ** nodePile)
 {
+	SmallNodeList * list;
+
 	while (*nodePile) {
 		list = *nodePile;
 		*nodePile = list->next;
@@ -736,7 +742,7 @@ static void threadSequenceThroughGraph(TightString * tString,
 	char line[MAXLINE];
 	long long_var;
 	long long longlong_var, longlong_var2, longlong_var3;
-	ShortNodeList * nodePile = NULL;
+	SmallNodeList * nodePile = NULL;
 
 	clearKmer(&word);
 	clearKmer(&antiWord);
