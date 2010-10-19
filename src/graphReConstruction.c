@@ -36,6 +36,7 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #include "utility.h"
 #include "kmer.h"
 #include "kmerOccurenceTable.h"
+#include "roadMap.h"
 
 #define ADENINE 0
 #define CYTOSINE 1
@@ -488,7 +489,8 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 					    ReferenceMapping * referenceMappings,
 					    Coordinate referenceMappingCount,
 					    IDnum refCount,
-					    FILE ** rdmapFile,
+					    Annotation * annotations,
+					    IDnum annotationCount,
 					    boolean second_in_pair)
 {
 	Kmer word;
@@ -502,15 +504,10 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 	ReferenceMapping * refMap = NULL;
 	Coordinate uniqueIndex = 0;
 	Coordinate annotIndex = 0;
-	Coordinate annotStart = -1;
-	Coordinate annotPosition = -1;
-	Coordinate annotLength = -1;
-	IDnum annotSeqID = -1;
-	char line[MAXLINE];
-	long long_var;
-	long long longlong_var, longlong_var2, longlong_var3;
+	IDnum annotCount = 0;
 	boolean reversed;
 	SmallNodeList * nodePile = NULL;
+	Annotation * annotation = annotations;
 
 	Node *node;
 	Node *previousNode = NULL;
@@ -523,29 +520,6 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 	    || category / 2 >= CATEGORIES)
 		return;
 
-	// Get initial annotation
-	if (*rdmapFile) {
-		if (!fgets(line, MAXLINE, *rdmapFile)) {
-			fclose(*rdmapFile);
-			*rdmapFile = NULL;
-		}
-		else if (line[0] == 'R') 
-			;
-		else {
-			sscanf(line, "%ld\t%lld\t%lld\t%lld\n", &long_var,
-			       &longlong_var, &longlong_var2, &longlong_var3);
-			annotSeqID = (IDnum) long_var;
-
-			annotPosition = (Coordinate) longlong_var;
-			annotStart = (Coordinate) longlong_var2;
-			if (annotSeqID > 0)
-				annotLength = (Coordinate) longlong_var3 - annotStart;
-			else
-				annotLength = annotStart - (Coordinate) longlong_var3;
-			annotIndex = 0;
-		}
-	}
-	
 	// Neglect any string shorter than WORDLENGTH :
 	if (getLength(tString) < wordLength)
 		return;
@@ -589,35 +563,18 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 		}
 
 		// Update annotation if necessary
-		if (*rdmapFile && line[0] != 'R' && annotIndex == annotLength) {
-			if (!fgets(line, MAXLINE, *rdmapFile)) {
-				fclose(*rdmapFile);
-				*rdmapFile = NULL;
-			}
-			else if (line[0] == 'R') 
-				;
-			else {
-				sscanf(line, "%ld\t%lld\t%lld\t%lld\n", &long_var,
-				       &longlong_var, &longlong_var2, &longlong_var3);
-				annotSeqID = (IDnum) long_var;
-
-				annotPosition = (Coordinate) longlong_var;
-				annotStart = (Coordinate) longlong_var2;
-				if (annotSeqID > 0)
-					annotLength = (Coordinate) longlong_var3 - annotStart;
-				else
-					annotLength = annotStart - (Coordinate) longlong_var3;
-				annotIndex = 0;
-			}
+		if (annotCount < annotationCount && annotIndex == getAnnotationLength(annotation)) {
+			annotation = getNextAnnotation(annotation);
+			annotCount++;
 		}
 
 		// Search for reference mapping
-		if (*rdmapFile && line[0] != 'R' && uniqueIndex >= annotPosition && annotSeqID <= refCount && annotSeqID >= -refCount) {
-			refID = annotSeqID;
+		if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation) && getAnnotSequenceID(annotation) <= refCount && getAnnotSequenceID(annotation) >= -refCount) {
+			refID = getAnnotSequenceID(annotation);
 			if (refID > 0)
-				refCoord = annotStart + annotIndex;
+				refCoord = getStart(annotation) + annotIndex;
 			else
-				refCoord = annotStart - annotIndex;
+				refCoord = getStart(annotation) - annotIndex;
 			
 			refMap = findReferenceMapping(refID, refCoord, referenceMappings, referenceMappingCount);
 			// If success
@@ -672,7 +629,7 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 
 		}
 
-		if (*rdmapFile && line[0] != 'R' && uniqueIndex >= annotPosition)
+		if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation))
 			annotIndex++;
 		else
 			uniqueIndex++;
@@ -690,15 +647,6 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 	}
 
 	unlockMemorizedNodes(&nodePile);
-	if (*rdmapFile) {
-		while (line[0] != 'R') {
-			if (!fgets(line, MAXLINE, *rdmapFile)) {
-				fclose(*rdmapFile);
-				*rdmapFile = NULL;
-				break;
-			}
-		}
-	}
 }
 
 static void threadSequenceThroughGraph(TightString * tString,
@@ -710,7 +658,8 @@ static void threadSequenceThroughGraph(TightString * tString,
 				       ReferenceMapping * referenceMappings,
 				       Coordinate referenceMappingCount,
 				       IDnum refCount,
-				       FILE ** rdmapFile,
+				       Annotation * annotations,
+				       IDnum annotationCount,
 				       boolean second_in_pair)
 {
 	Kmer word;
@@ -732,43 +681,15 @@ static void threadSequenceThroughGraph(TightString * tString,
 	IDnum refID;
 	Coordinate refCoord = 0;
 	ReferenceMapping * refMap;
+	Annotation * annotation = annotations;
 	Coordinate index = 0;
 	Coordinate uniqueIndex = 0;
 	Coordinate annotIndex = 0;
-	Coordinate annotStart = -1;
-	Coordinate annotPosition = -1;
-	Coordinate annotLength = -1;
-	IDnum annotSeqID = 0;
-	char line[MAXLINE];
-	long long_var;
-	long long longlong_var, longlong_var2, longlong_var3;
+	IDnum annotCount = 0;
 	SmallNodeList * nodePile = NULL;
 
 	clearKmer(&word);
 	clearKmer(&antiWord);
-
-	// Get initial annotation
-	if (*rdmapFile) {
-		if (!fgets(line, MAXLINE, *rdmapFile)) {
-			fclose(*rdmapFile);
-			*rdmapFile = NULL;
-		}
-		else if (line[0] == 'R') 
-			;
-		else {
-			sscanf(line, "%ld\t%lld\t%lld\t%lld\n", &long_var,
-			       &longlong_var, &longlong_var2, &longlong_var3);
-			annotSeqID = (IDnum) long_var;
-
-			annotPosition = (Coordinate) longlong_var;
-			annotStart = (Coordinate) longlong_var2;
-			if (annotSeqID > 0)
-				annotLength = (Coordinate) longlong_var3 - annotStart;
-			else
-				annotLength = annotStart - (Coordinate) longlong_var3;
-			annotIndex = 0;
-		}
-	}
 
 	// Neglect any string shorter than WORDLENGTH :
 	if (getLength(tString) < wordLength)
@@ -801,26 +722,9 @@ static void threadSequenceThroughGraph(TightString * tString,
 		}
 
 		// Update annotation if necessary
-		if (*rdmapFile && line[0] != 'R' && annotIndex == annotLength) {
-			if (!fgets(line, MAXLINE, *rdmapFile)) {
-				fclose(*rdmapFile);
-				*rdmapFile = NULL;
-			}
-			else if (line[0] == 'R') 
-				;
-			else {
-				sscanf(line, "%ld\t%lld\t%lld\t%lld\n", &long_var,
-				       &longlong_var, &longlong_var2, &longlong_var3);
-				annotSeqID = (IDnum) long_var;
-
-				annotPosition = (Coordinate) longlong_var;
-				annotStart = (Coordinate) longlong_var2;
-				if (annotSeqID > 0)
-					annotLength = (Coordinate) longlong_var3 - annotStart;
-				else
-					annotLength = annotStart - (Coordinate) longlong_var3;
-				annotIndex = 0;
-			}
+		if (annotCount < annotationCount && annotIndex == getAnnotationLength(annotation)) {
+			annotation = getNextAnnotation(annotation);
+			annotCount++;
 		}
 
 		// Search for reference mapping
@@ -844,12 +748,12 @@ static void threadSequenceThroughGraph(TightString * tString,
 			}
 		}
 		// Search for reference-based mapping
-		else if (*rdmapFile && line[0] != 'R' && uniqueIndex >= annotPosition && annotSeqID <= refCount && annotSeqID >= -refCount) {
-			refID = annotSeqID;
+		else if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation) && getAnnotSequenceID(annotation) <= refCount && getAnnotSequenceID(annotation) >= -refCount) {
+			refID = getAnnotSequenceID(annotation);
 			if (refID > 0)
-				refCoord = annotStart + annotIndex; 
+				refCoord = getStart(annotation) + annotIndex; 
 			else
-				refCoord = annotStart - annotIndex; 
+				refCoord = getStart(annotation) - annotIndex; 
 			
 			refMap = findReferenceMapping(refID, refCoord, referenceMappings, referenceMappingCount);
 			// If success
@@ -918,7 +822,7 @@ static void threadSequenceThroughGraph(TightString * tString,
 		}
 
 		// Increment positions
-		if (*rdmapFile && line[0] != 'R' && uniqueIndex >= annotPosition) 
+		if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation)) 
 			annotIndex++;
 		else
 			uniqueIndex++;
@@ -996,15 +900,6 @@ static void threadSequenceThroughGraph(TightString * tString,
 	}
 
 	unlockMemorizedNodes(&nodePile);
-	if (*rdmapFile) {
-		while (line[0] != 'R') {
-			if (!fgets(line, MAXLINE, *rdmapFile)) {
-				fclose(*rdmapFile);
-				*rdmapFile = NULL;
-				break;
-			}
-		}
-	}
 }
 
 static void fillUpGraph(ReadSet * reads,
@@ -1019,6 +914,8 @@ static void fillUpGraph(ReadSet * reads,
 	FILE * file = NULL;
 	char line[MAXLINE];
 	boolean second_in_pair = false;
+	Annotation * annotations; 
+	IDnum annotationCount = 0;
 	
 	if (referenceMappings) {
 		file = fopen(roadmapFilename, "r");
@@ -1033,7 +930,14 @@ static void fillUpGraph(ReadSet * reads,
 #ifdef OPENMP
 	#pragma omp parallel for
 #endif
-	for (readIndex = 0; readIndex < reads->readCount; readIndex++) {
+	for (readIndex = refCount; readIndex < reads->readCount; readIndex++) {
+
+#ifdef OPENMP
+		#pragma omp critical 
+#endif
+		if (referenceMappings) 
+			annotations = importAnnotations(file, &readIndex, &annotationCount);
+
 		category = reads->categories[readIndex];
 		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 	
@@ -1043,8 +947,11 @@ static void fillUpGraph(ReadSet * reads,
 						category, 
 						readTracking, double_strand,
 						referenceMappings, referenceMappingCount,
-					  	refCount, &file,
+					  	refCount, annotations, annotationCount,
 						second_in_pair);
+
+		if (referenceMappings)
+			free(annotations);
 	}
 
 	createNodeReadStartArrays(graph);
@@ -1064,6 +971,12 @@ static void fillUpGraph(ReadSet * reads,
 			velvetLog("Threading through reads %d / %d\n",
 				  readIndex, reads->readCount);
 
+#ifdef OPENMP
+		#pragma omp critical 
+#endif
+		if (referenceMappings) 
+			annotations = importAnnotations(file, &readIndex, &annotationCount);
+
 		category = reads->categories[readIndex];
 		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 
@@ -1072,8 +985,10 @@ static void fillUpGraph(ReadSet * reads,
 					   graph, readIndex + 1, category,
 					   readTracking, double_strand,
 					   referenceMappings, referenceMappingCount,
-					   refCount, &file, second_in_pair);
+					   refCount, annotations, annotationCount, second_in_pair);
 
+		if (referenceMappings)
+			free(annotations);
 	}
 
 	orderNodeReadStartArrays(graph);

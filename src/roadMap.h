@@ -50,6 +50,7 @@ IDnum getFinishID(Annotation * annot);
 char *readAnnotation(Annotation * annot);
 
 Annotation *getNextAnnotation(Annotation * annot);
+Annotation * importAnnotations(FILE * file, IDnum * readIndex, IDnum * annotationCount);
 
 ////////////////////////////////////////////////////////////////////
 //      RoadMap stuff
