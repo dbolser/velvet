@@ -138,44 +138,12 @@ static RecycleBin *smallNodeListMemory = NULL;
 
 #define BLOCKSIZE 1000
 
-#ifdef OPENMP
-static void initSmallNodeListMemory(void)
-{
-	int n;
-	int i;
-
-	n = omp_get_max_threads();
-	#pragma omp critical
-	{
-		if (smallNodeListMemory == NULL)
-			smallNodeListMemory = newRecycleBinArray(n, sizeof(SmallNodeList), BLOCKSIZE);
-		if (nodePile == NULL)
-			nodePile = mallocOrExit (n, SmallNodeList*);
-		for (i = 0; i < n; i++)
-			nodePile[i] = NULL;
-	}
-}
-#endif
-
 static SmallNodeList *allocateSmallNodeList()
 {
-#ifdef OPENMP
-#if DEBUG
-	if (smallNodeListMemory == NULL)
-	{
-		velvetLog("The memory for small nodes seems uninitialised, "
-			  "this is probably a bug, aborting.\n");
-		abort();
-	}
-#endif
-	return allocatePointer(getRecycleBinInArray(smallNodeListMemory,
-						    omp_get_thread_num()));
-#else
 	if (smallNodeListMemory == NULL)
 		smallNodeListMemory = newRecycleBin(sizeof(SmallNodeList), BLOCKSIZE);
 
 	return allocatePointer(smallNodeListMemory);
-#endif
 }
 
 static void deallocateSmallNodeList(SmallNodeList * smallNodeList)
@@ -215,7 +183,7 @@ static void unlockMemorizedNodes(SmallNodeList ** nodePile)
 		list = *nodePile;
 		*nodePile = list->next;
 #ifdef OPENMP
-		unlockNode(list->node);
+		unLockNode(list->node);
 #endif
 		deallocateSmallNodeList(list);
 	}
@@ -760,10 +728,10 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 #ifdef OPENMP
 			lockNode(node);
 #endif
-			if (!nodeMemorized(node)) {
+			if (!nodeMemorized(node, nodePile)) {
 				incrementReadStartCount(node, graph);
 				setSingleNodeStatus(node, true);
-				memorizeNode(node);
+				memorizeNode(node, &nodePile);
 			}
 		}
 	}
@@ -1035,7 +1003,7 @@ static void threadSequenceThroughGraph(TightString * tString,
 	}
 
 	if (readTracking && category / 2 < CATEGORIES)
-		unlockMemorizedNodes();
+		unlockMemorizedNodes(&nodePile);
 #ifdef OPENMP
 	else
 	{
@@ -1154,14 +1122,7 @@ static void fillUpGraph(ReadSet * reads,
 	orderNodeReadStartArrays(graph);
 
 	if (smallNodeListMemory != NULL)
-#ifdef OPENMP
-	{
-		destroyRecycleBinArray(smallNodeListMemory);
-		free (nodePile);
-	}
-#else
 		destroyRecycleBin(smallNodeListMemory);
-#endif
 
 	if (file)
 		fclose(file);
