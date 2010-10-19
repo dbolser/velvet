@@ -49,7 +49,6 @@ struct smallNodeList_st {
 } ATTRIBUTE_PACKED;
 
 static RecycleBin *smallNodeListMemory = NULL;
-static SmallNodeList *nodePile = NULL;
 
 #define BLOCKSIZE 1000
 
@@ -67,22 +66,29 @@ static void deallocateSmallNodeList(SmallNodeList * smallNodeList)
 	deallocatePointer(smallNodeListMemory, smallNodeList);
 }
 
-static void memorizeNode(Node * node)
+static void memorizeNode(Node * node, SmallNodeList ** nodePile)
 {
 	SmallNodeList *list = allocateSmallNodeList();
 	list->node = node;
-	list->next = nodePile;
-	nodePile = list;
+	list->next = *nodePile;
+	*nodePile = list;
 }
 
-static void unlockMemorizedNodes()
-{
-	SmallNodeList *list;
+static boolean nodeMemorized(Node * node, SmallNodeList * nodePile) {
+	SmallNodeList * list;
 
-	while (nodePile) {
-		list = nodePile;
-		nodePile = list->next;
-		setSingleNodeStatus(list->node, false);
+	for (list = nodePile; list; list = list->next)
+		if (list->node = node)
+			return true;
+
+	return false;
+}
+
+static void unlockMemorizedNodes(SmallNodeList ** nodePile)
+{
+	while (*nodePile) {
+		list = *nodePile;
+		*nodePile = list->next;
 		deallocateSmallNodeList(list);
 	}
 }
@@ -498,6 +504,7 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 	long long_var;
 	long long longlong_var, longlong_var2, longlong_var3;
 	boolean reversed;
+	SmallNodeList * nodePile = NULL;
 
 	Node *node;
 	Node *previousNode = NULL;
@@ -667,14 +674,16 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 		previousNode = node;
 
 		// Fill in graph
-		if (node && !getNodeStatus(node)) {
+#ifdef OPENMP
+		#pragma omp critical 
+#endif
+		if (node && !nodeMemorized(node, nodePile)) {
 			incrementReadStartCount(node, graph);
-			setSingleNodeStatus(node, true);
-			memorizeNode(node);
+			memorizeNode(node, &nodePile);
 		}
 	}
 
-	unlockMemorizedNodes();
+	unlockMemorizedNodes(&nodePile);
 	if (*rdmapFile) {
 		while (line[0] != 'R') {
 			if (!fgets(line, MAXLINE, *rdmapFile)) {
@@ -727,6 +736,7 @@ static void threadSequenceThroughGraph(TightString * tString,
 	char line[MAXLINE];
 	long long_var;
 	long long longlong_var, longlong_var2, longlong_var3;
+	ShortNodeList * nodePile = NULL;
 
 	clearKmer(&word);
 	clearKmer(&antiWord);
@@ -908,6 +918,9 @@ static void threadSequenceThroughGraph(TightString * tString,
 			uniqueIndex++;
 
 		// Fill in graph
+#ifdef OPENMP
+		#pragma omp critical
+#endif 
 		if (node) {
 			kmerIndex = readNucleotideIndex - wordLength;
 
@@ -946,15 +959,13 @@ static void threadSequenceThroughGraph(TightString * tString,
 					previousMarker = marker;
 				} else {
 					if (readTracking) {
-						if (!getNodeStatus(node)) {
+						if (!nodeMemorized(node, nodePile)) {
 							addReadStart(node,
 								     seqID,
 								     coord,
 								     graph,
 								     kmerIndex);
-							setSingleNodeStatus
-							    (node, true);
-							memorizeNode(node);
+							memorizeNode(node, &nodePile);
 						} else {
 							blurLastShortReadMarker
 							    (node, graph);
@@ -978,7 +989,7 @@ static void threadSequenceThroughGraph(TightString * tString,
 		index++;
 	}
 
-	unlockMemorizedNodes();
+	unlockMemorizedNodes(&nodePile);
 	if (*rdmapFile) {
 		while (line[0] != 'R') {
 			if (!fgets(line, MAXLINE, *rdmapFile)) {
@@ -1013,8 +1024,12 @@ static void fillUpGraph(ReadSet * reads,
 
 	resetNodeStatus(graph);
 
+#ifdef OPENMP
+	#pragma omp parallel for
+#endif
 	for (readIndex = 0; readIndex < reads->readCount; readIndex++) {
 		category = reads->categories[readIndex];
+		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 	
 		ghostThreadSequenceThroughGraph(getTightStringInArray(reads->tSequences, readIndex),
 						kmerTable,
@@ -1024,8 +1039,6 @@ static void fillUpGraph(ReadSet * reads,
 						referenceMappings, referenceMappingCount,
 					  	refCount, &file,
 						second_in_pair);
-
-		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 	}
 
 	createNodeReadStartArrays(graph);
@@ -1037,13 +1050,16 @@ static void fillUpGraph(ReadSet * reads,
 				break;
 	}
 
-	second_in_pair = false;
+#ifdef OPENMP
+	#pragma omp parallel for
+#endif
 	for (readIndex = 0; readIndex < reads->readCount; readIndex++) {
-		category = reads->categories[readIndex];
-	
 		if (readIndex % 100000 == 0)
 			velvetLog("Threading through reads %d / %d\n",
 				  readIndex, reads->readCount);
+
+		category = reads->categories[readIndex];
+		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 
 		threadSequenceThroughGraph(getTightStringInArray(reads->tSequences, readIndex),
 					   kmerTable,
@@ -1052,7 +1068,6 @@ static void fillUpGraph(ReadSet * reads,
 					   referenceMappings, referenceMappingCount,
 					   refCount, &file, second_in_pair);
 
-		second_in_pair = reads->categories[readIndex] % 2 && isSecondInPair(reads, readIndex);
 	}
 
 	orderNodeReadStartArrays(graph);
