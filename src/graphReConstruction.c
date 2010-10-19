@@ -953,6 +953,8 @@ static void fillUpGraph(ReadSet * reads,
 		if (referenceMappings)
 			free(annotations);
 	}
+	if (file) 
+		fclose(file);
 
 	createNodeReadStartArrays(graph);
 
