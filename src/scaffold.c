@@ -23,6 +23,10 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #include <time.h>
 #include <math.h>
 
+#ifdef OPENMP
+#include <omp.h>
+#endif
+
 #include "globals.h"
 #include "graph.h"
 #include "concatenatedGraph.h"
