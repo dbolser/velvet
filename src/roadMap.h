@@ -26,6 +26,7 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 struct roadMapArray_st {
 	RoadMap *array;
 	Annotation *annotations;
+	IDnum * indexOrder;
 	IDnum length;
 	int WORDLENGTH;
 	boolean double_strand;
@@ -35,7 +36,7 @@ struct roadMapArray_st {
 ////////////////////////////////////////////////////////////////////
 //      Annotation stuff
 ////////////////////////////////////////////////////////////////////
-IDnum getAnnotSequenceID(Annotation * annot);
+IDnum getAnnotSequenceID(Annotation * annot, RoadMapArray * rdmaps);
 Coordinate getFinish(Annotation * annot);
 Coordinate getStart(Annotation * annot);
 Coordinate getPosition(Annotation * annot);

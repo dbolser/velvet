@@ -67,9 +67,12 @@ Coordinate getFinish(Annotation * annot)
 	return annot->finish.coord;
 }
 
-IDnum getAnnotSequenceID(Annotation * annot)
+IDnum getAnnotSequenceID(Annotation * annot, RoadMapArray * rdmaps)
 {
-	return annot->sequenceID;
+	if (rdmaps && rdmaps->indexOrder)
+		return rdmaps->indexOrder[annot->sequenceID];
+	else
+		return annot->sequenceID;
 }
 
 Coordinate getStart(Annotation * annot)
@@ -90,6 +93,29 @@ Coordinate getAnnotationLength(Annotation * annot)
 	return annot->length;
 }
 
+//////////////////////////////////////////////////////////////
+// Index conversion table
+//////////////////////////////////////////////////////////////
+
+typedef struct indexConversion_st {
+	IDnum initialIndex;
+	IDnum actualIndex;
+} IndexConversion;
+
+static int compareIndexConversions(const void * A, const void * B) {
+	IndexConversion * rdmapA = (IndexConversion *) A; 
+	IndexConversion * rdmapB = (IndexConversion *) B; 
+	IDnum diff = rdmapA->actualIndex - rdmapB->actualIndex;
+
+	if (diff > 0) 
+		return 1;
+	else if (diff == 0)
+		return 0;
+	else 
+		return -1;
+}
+//////////////////////////////////////////////////////////////
+
 // Imports roadmap from the appropriate file format
 // Memory allocated within the function
 RoadMapArray *importRoadMapArray(char *filename)
@@ -97,7 +123,6 @@ RoadMapArray *importRoadMapArray(char *filename)
 	FILE *file;
 	const int maxline = 100;
 	char *line = mallocOrExit(maxline, char);
-	RoadMap *array;
 	RoadMap *rdmap = NULL;
 	IDnum seqID;
 	Coordinate position, start, finish;
@@ -108,6 +133,10 @@ RoadMapArray *importRoadMapArray(char *filename)
 	short short_var;
 	long long_var, long_var2;
 	long long longlong_var, longlong_var2, longlong_var3;
+#ifdef OPENMP
+	IndexConversion * indexConversionTable, * currentIndexConversionEntry;
+	IDnum counter = 1;
+#endif
 
 	velvetLog("Reading roadmap file %s\n", filename);
 
@@ -119,8 +148,7 @@ RoadMapArray *importRoadMapArray(char *filename)
 	resetWordFilter(result->WORDLENGTH);
 	result->length = sequenceCount;
 	result->referenceCount = long_var2;
-	array = mallocOrExit(sequenceCount, RoadMap);
-	result->array = array;
+	result->array = callocOrExit(sequenceCount, RoadMap);
 	result->double_strand = (boolean) short_var;
 
 	while (fgets(line, maxline, file) != NULL)
@@ -133,13 +161,20 @@ RoadMapArray *importRoadMapArray(char *filename)
 
 	file = fopen(filename, "r");
 
+	indexConversionTable = callocOrExit(sequenceCount, IndexConversion);
+	currentIndexConversionEntry = indexConversionTable;
+	rdmap = result->array - 1;
 	if (!fgets(line, maxline, file))
 		exitErrorf(EXIT_FAILURE, true, "%s incomplete.", filename);
 	while (fgets(line, maxline, file) != NULL) {
 		if (line[0] == 'R') {
+#ifdef OPENMP
 		    	sscanf(line, "%*s %ld\n", &long_var);
-			rdmap = getRoadMapInArray(result, long_var--); 
-			rdmap->annotationCount = 0;
+			currentIndexConversionEntry->initialIndex = counter++;
+			currentIndexConversionEntry->actualIndex = (IDnum) long_var; 
+			currentIndexConversionEntry++;
+#endif
+			rdmap++;
 		} else {
 			sscanf(line, "%ld\t%lld\t%lld\t%lld\n", &long_var,
 			       &longlong_var, &longlong_var2, &longlong_var3);
@@ -157,13 +192,23 @@ RoadMapArray *importRoadMapArray(char *filename)
 			else
 				nextAnnotation->length = start - finish;
 
-
 			rdmap->annotationCount++;
 			nextAnnotation++;
 		}
 	}
 
-	velvetLog("%d roadmaps reads\n", sequenceCount);
+	velvetLog("%d roadmaps read\n", sequenceCount);
+
+#ifdef OPENMP
+	// Sort the index conversion table 
+	qsort(indexConversionTable, sequenceCount, sizeof(IndexConversion), compareIndexConversions);
+
+	// Record the order of the sequence indices
+	result->indexOrder = callocOrExit(sequenceCount, IDnum);
+	for (counter = 0; counter < sequenceCount; counter++)
+		result->indexOrder[counter] = indexConversionTable[counter].initialIndex;
+	free(indexConversionTable);
+#endif
 
 	fclose(file);
 	free(line);

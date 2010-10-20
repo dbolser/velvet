@@ -271,7 +271,7 @@ static boolean findOrInsertOccurenceInSplayTable(Kmer * kmer, IDnum * seqID,
 }
 
 static void printAnnotations(IDnum *sequenceIDs, Coordinate * coords,
-			     TightString * tString, SplayTable * table,
+			     TightString * array, SplayTable * table,
 			     FILE * file, boolean second_in_pair, IDnum seqID) 
 {
 	Coordinate readNucleotideIndex = 0;
@@ -291,6 +291,7 @@ static void printAnnotations(IDnum *sequenceIDs, Coordinate * coords,
 	char lineBuffer[128];
 	int bufferSize = 1024;
 	int currentSize = 1;
+	TightString * tString = getTightStringInArray(array, seqID - 1); 
 
 	clearKmer(&word);
 	clearKmer(&antiWord);
@@ -464,7 +465,7 @@ static void printAnnotations(IDnum *sequenceIDs, Coordinate * coords,
 	return;
 }
 
-static void computeClearHSPs(TightString * tString, FILE * seqFile, boolean second_in_pair, SplayTable * table, IDnum * sequenceIDs, Coordinate * coords) {
+static void computeClearHSPs(TightString * array, FILE * seqFile, boolean second_in_pair, SplayTable * table, IDnum ** sequenceIDs, Coordinate ** coords, IDnum * seqID) {
 	Coordinate readNucleotideIndex = 0;
 	Kmer word;
 	Kmer antiWord;
@@ -479,6 +480,27 @@ static void computeClearHSPs(TightString * tString, FILE * seqFile, boolean seco
 	long long_var;
 	long long longlong_var;
 	int penalty;
+	TightString * tString;
+	Coordinate length;
+
+#ifdef OMP
+	#pragma omp critical
+	{
+#endif
+	// Get read ID:
+	if (!fgets(line, MAXLINE, seqFile)) {
+		puts("Incomplete Sequences file (computeHSPScores)");
+#ifdef DEBUG
+		abort();
+#endif 
+		exit(1);
+	}
+	sscanf(line, ">%*s\t%li\t", &long_var);
+	*seqID = (IDnum) long_var;
+	tString = getTightStringInArray(array, *seqID - 1);
+	length = getLength(tString);
+	*sequenceIDs = callocOrExit(length, IDnum);
+	*coords = callocOrExit(length, Coordinate);
 
 	// Parse file for mapping info
 	while (seqFile && fgets(line, MAXLINE, seqFile)) {
@@ -497,8 +519,10 @@ static void computeClearHSPs(TightString * tString, FILE * seqFile, boolean seco
 			}
 		}
 	}
+#ifdef OMP
+	}
+#endif
 
-	// First pass for unambiguous hits
 	// Fill in the initial word : 
 	clearKmer(&word);
 	clearKmer(&antiWord);
@@ -530,41 +554,41 @@ static void computeClearHSPs(TightString * tString, FILE * seqFile, boolean seco
 				hit = findKmerInKmerOccurenceTable(&word, table->kmerOccurenceTable); 
 
 				if (hit && (hit = getMostAppropriateHit(readNucleotideIndex, getLength(tString), true, hit, mapCount, mapReferenceIDs, mapCoords, table->WORDLENGTH))) 
-					sequenceIDs[readNucleotideIndex] = getKmerOccurenceNodeID(hit);
+					(*sequenceIDs)[readNucleotideIndex] = getKmerOccurenceNodeID(hit);
 			} else {
 				hit = findKmerInKmerOccurenceTable(&antiWord, table->kmerOccurenceTable); 
 
 				if (hit && (hit = getMostAppropriateHit(readNucleotideIndex, getLength(tString), false, hit, mapCount, mapReferenceIDs, mapCoords, table->WORDLENGTH))) 
-					sequenceIDs[readNucleotideIndex] = -getKmerOccurenceNodeID(hit);
+					(*sequenceIDs)[readNucleotideIndex] = -getKmerOccurenceNodeID(hit);
 			}
 		} else {
 			if (!second_in_pair) {
 				hit = findKmerInKmerOccurenceTable(&word, table->kmerOccurenceTable); 
 
 				if (hit && (hit = getMostAppropriateHit(readNucleotideIndex, getLength(tString), true, hit, mapCount, mapReferenceIDs, mapCoords, table->WORDLENGTH))) 
-					sequenceIDs[readNucleotideIndex] = getKmerOccurenceNodeID(hit);
+					(*sequenceIDs)[readNucleotideIndex] = getKmerOccurenceNodeID(hit);
 			} else {
 				hit = findKmerInKmerOccurenceTable(&antiWord, table->kmerOccurenceTable); 
 
 				if (hit && (hit = getMostAppropriateHit(readNucleotideIndex, getLength(tString), false, hit, mapCount, mapReferenceIDs, mapCoords, table->WORDLENGTH))) 
-					sequenceIDs[readNucleotideIndex] = -getKmerOccurenceNodeID(hit);
+					(*sequenceIDs)[readNucleotideIndex] = -getKmerOccurenceNodeID(hit);
 			}
 		}
 
-		if (sequenceIDs[readNucleotideIndex]) {
-			if (sequenceIDs[readNucleotideIndex] > 0) 
-				coords[readNucleotideIndex] = getKmerOccurencePosition(hit) - readNucleotideIndex;
+		if ((*sequenceIDs)[readNucleotideIndex]) {
+			if ((*sequenceIDs)[readNucleotideIndex] > 0) 
+				(*coords)[readNucleotideIndex] = getKmerOccurencePosition(hit) - readNucleotideIndex;
 			else
-				coords[readNucleotideIndex] = getKmerOccurencePosition(hit) + readNucleotideIndex - getLength(tString) + 1;
+				(*coords)[readNucleotideIndex] = getKmerOccurencePosition(hit) + readNucleotideIndex - getLength(tString) + 1;
 		}
 	
 		// Barrier to flip-flopping
-		if (sequenceIDs[readNucleotideIndex - 1] != 0
-		    && (sequenceIDs[readNucleotideIndex] != sequenceIDs[readNucleotideIndex - 1]
-			|| coords[readNucleotideIndex] != coords[readNucleotideIndex - 1])) {
+		if ((*sequenceIDs)[readNucleotideIndex - 1] != 0
+		    && ((*sequenceIDs)[readNucleotideIndex] != (*sequenceIDs)[readNucleotideIndex - 1]
+			|| (*coords)[readNucleotideIndex] != (*coords)[readNucleotideIndex - 1])) {
 			// Break in continuity... skip k positions 
-			sequenceIDs[readNucleotideIndex] = 0;
-			coords[readNucleotideIndex] = -1;
+			(*sequenceIDs)[readNucleotideIndex] = 0;
+			(*coords)[readNucleotideIndex] = -1;
 			readNucleotideIndex++;
 
 			for (penalty = 0; penalty < table->WORDLENGTH  - 1 && readNucleotideIndex < getLength(tString); penalty++) {
@@ -576,8 +600,8 @@ static void computeClearHSPs(TightString * tString, FILE * seqFile, boolean seco
 #else
 				reversePushNucleotide(&antiWord, 3 - nucleotide);
 #endif
-				sequenceIDs[readNucleotideIndex] = 0;
-				coords[readNucleotideIndex] = -1;
+				(*sequenceIDs)[readNucleotideIndex] = 0;
+				(*coords)[readNucleotideIndex] = -1;
 				readNucleotideIndex++;
 			}
 		} else
@@ -589,26 +613,21 @@ static void computeClearHSPs(TightString * tString, FILE * seqFile, boolean seco
 	free(mapCoords);
 }
 
-void inputSequenceIntoSplayTable(TightString * tString,
+void inputSequenceIntoSplayTable(TightString * array,
 				 SplayTable * table,
 				 FILE * file, FILE * seqFile,
 				 boolean second_in_pair,
 				 IDnum seqID)
 {
-	Coordinate length = getLength(tString);
 	IDnum * sequenceIDs = NULL;
 	Coordinate * coords = NULL;
 
 	// If appropriate, get the HSPs on reference sequences
-	if (table->kmerOccurenceTable) {
-		length = getLength(tString);
-		sequenceIDs = callocOrExit(length, IDnum);
-		coords = callocOrExit(length, Coordinate);
-		computeClearHSPs(tString, seqFile, second_in_pair, table, sequenceIDs, coords);
-	}
-	
+	if (table->kmerOccurenceTable) 
+		computeClearHSPs(array, seqFile, second_in_pair, table, &sequenceIDs, &coords, &seqID);
+
 	// Go through read, eventually with annotations
-	printAnnotations(sequenceIDs, coords, tString, table, file, second_in_pair, seqID);
+	printAnnotations(sequenceIDs, coords, array, table, file, second_in_pair, seqID);
 
 	// Clean up
 	if (sequenceIDs) {
@@ -734,7 +753,10 @@ void inputSequenceArrayIntoSplayTableAndArchive(ReadSet * reads,
 	if (reads->tSequences == NULL)
 		convertSequences(reads);
 
-	if (referenceSequenceCount && (kmerCount = countReferenceKmers(reads, table->WORDLENGTH))> 0) {
+	gettimeofday(&start, NULL);
+	array = reads->tSequences;
+
+	if (referenceSequenceCount && (kmerCount = countReferenceKmers(reads, table->WORDLENGTH)) > 0) {
 		table->kmerOccurenceTable = newKmerOccurenceTable(24 , table->WORDLENGTH);
 		allocateKmerOccurences(kmerCount, table->kmerOccurenceTable);
 		seqFile = fopen(seqFilename, "r");
@@ -748,31 +770,31 @@ void inputSequenceArrayIntoSplayTableAndArchive(ReadSet * reads,
 			while (fgets(line, MAXLINE, seqFile))
 				if (line[0] == '>')
 					break;
+
+#ifdef OPENMP
+		#pragma omp parallel for
+#endif
+		for (index = 0; index < referenceSequenceCount; index++) 
+			inputReferenceIntoSplayTable(getTightStringInArray(array, index), table, outfile, index + 1);
+
+		sortKmerOccurenceTable(table->kmerOccurenceTable);
 	}
 
-	gettimeofday(&start, NULL);
 	velvetLog("Inputting sequences...\n");
-	array = reads->tSequences;
+
 #ifdef OPENMP
 	#pragma omp parallel for
 #endif
-	for (index = 0; index < sequenceCount; index++) {
-		// Prorgess report on screen
+	for (index = referenceSequenceCount; index < sequenceCount; index++) {
+		// Progress report on screen
 		if (index % 1000000 == 0) {
 			velvetLog("Inputting sequence %d / %d\n", index,
 			       sequenceCount);
 			fflush(stdout);
 		}
 
-		// Before starting non-reference sequences, sort kmerOccurenceTable
-		if (index > 0 
-		    && reads->categories[index - 1] == REFERENCE
-		    && reads->categories[index] != REFERENCE)
-			sortKmerOccurenceTable(table->kmerOccurenceTable);
 		// Test to make sure that all the reference reads are before all the other reads
-		else if (index > 0
-		    && reads->categories[index - 1] != REFERENCE
-		    && reads->categories[index] == REFERENCE) {
+		if (reads->categories[index] == REFERENCE) {
 			velvetLog("Reference sequence placed after a non-reference read!\n");
 			velvetLog(">> Please re-order the filenames in your command line so as to have the reference sequence files before all the others\n");
 #ifdef DEBUG 
@@ -784,12 +806,7 @@ void inputSequenceArrayIntoSplayTableAndArchive(ReadSet * reads,
 		second_in_pair = reads->categories[index] % 2 && isSecondInPair(reads, index);
 
 		// Hashing the reads
-		if (reads->categories[index] == REFERENCE)
-			// Reference reads
-			inputReferenceIntoSplayTable(getTightStringInArray(array, index), table, outfile, index + 1);
-		else
-			// Normal reads
-			inputSequenceIntoSplayTable(getTightStringInArray(array, index), table, outfile, seqFile, second_in_pair, index + 1);
+		inputSequenceIntoSplayTable(array, table, outfile, seqFile, second_in_pair, index + 1);
 	}
 	gettimeofday(&end, NULL);
 	timersub(&end, &start, &diff);

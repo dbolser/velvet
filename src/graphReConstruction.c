@@ -655,8 +655,8 @@ static void ghostThreadSequenceThroughGraph(TightString * tString,
 		}
 
 		// Search for reference mapping
-		if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation) && getAnnotSequenceID(annotation) <= refCount && getAnnotSequenceID(annotation) >= -refCount) {
-			refID = getAnnotSequenceID(annotation);
+		if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation) && getAnnotSequenceID(annotation, NULL) <= refCount && getAnnotSequenceID(annotation, NULL) >= -refCount) {
+			refID = getAnnotSequenceID(annotation, NULL);
 			if (refID > 0)
 				refCoord = getStart(annotation) + annotIndex;
 			else
@@ -838,8 +838,8 @@ static void threadSequenceThroughGraph(TightString * tString,
 			}
 		}
 		// Search for reference-based mapping
-		else if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation) && getAnnotSequenceID(annotation) <= refCount && getAnnotSequenceID(annotation) >= -refCount) {
-			refID = getAnnotSequenceID(annotation);
+		else if (annotCount < annotationCount && uniqueIndex >= getPosition(annotation) && getAnnotSequenceID(annotation, NULL) <= refCount && getAnnotSequenceID(annotation, NULL) >= -refCount) {
+			refID = getAnnotSequenceID(annotation, NULL);
 			if (refID > 0)
 				refCoord = getStart(annotation) + annotIndex; 
 			else
@@ -1031,11 +1031,6 @@ static void fillUpGraph(ReadSet * reads,
 	IDnum annotationCount = 0;
 	
 	if (referenceMappings) {
-#ifdef OPENMP
-		velvetLog("Can't handle reference mapping in parallel mode ... yet. "
-			  "Aborting (sorry)\n");
-		abort();
-#endif
 		file = fopen(roadmapFilename, "r");
 		for (readIndex = 0; readIndex < refCount + 1; readIndex++)
 			while(fgets(line, MAXLINE, file))
