@@ -763,7 +763,7 @@ cleanUpMemory(PreGraph * preGraph, RoadMapArray * rdmaps, IDnum * chains)
 // Cleaning up reordering array
 void cleanUpIndexOrder(RoadMapArray * rdmapArray) {
 	if (rdmapArray->indexOrder) {
-		free(rdmapArray->indexOrder);
+		free(rmapArray->indexOrder);
 		rdmapArray->indexOrder = NULL;
 	}
 }
