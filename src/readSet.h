@@ -56,7 +56,9 @@ ReadSet *importReadSet(char *filename);
 void exportReadSet(char *filename, ReadSet * reads);
 
 // The overall argument parser and file reader for the hash function
+#ifndef CNY_WRITER
 void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * double_strand);
+#endif
 
 void logInstructions(int argc, char **argv, char *directory);
 
