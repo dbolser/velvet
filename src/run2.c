@@ -24,10 +24,6 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 
 #include "run.h"
 
-#ifdef CNY_SEQS
-#include "readSetCny.h"
-#endif
-
 static void printUsage()
 {
 	puts("Usage:");
@@ -94,9 +90,6 @@ int main(int argc, char **argv)
 	Coordinate std_dev_long = -1;
 	short int accelerationBits = 24;
 	boolean readTracking = false;
-#ifdef CNY_SEQS
-	boolean readCnySeqs = false;
-#endif
 	boolean exportAssembly = false;
 	boolean unusedReads = false;
 	boolean estimateCoverage = false;
@@ -253,11 +246,6 @@ int main(int argc, char **argv)
 		} else if (strcmp(arg, "-read_trkg") == 0) {
 			readTracking =
 			    (strcmp(argv[arg_index], "yes") == 0);
-#ifdef CNY_SEQS
-		} else if (strcmp(arg, "-read_cny_seqs") == 0) {
-			readCnySeqs =
-			    (strcmp(argv[arg_index], "yes") == 0);
-#endif
 		} else if (strcmp(arg, "-scaffolding") == 0) {
 			scaffolding =
 			    (strcmp(argv[arg_index], "yes") == 0);
@@ -429,18 +417,7 @@ int main(int argc, char **argv)
 	}
 
 	if (sequences == NULL) {
-#ifdef CNY_SEQS
-		if (readCnySeqs) {
-			char *cnySeqFilename = mallocOrExit(strlen(directory) + 100, char);
-			strcpy(cnySeqFilename, directory);
-			strcat(cnySeqFilename, "/CnyUnifiedSeq");
-			sequences = importCnyReadSet(cnySeqFilename);
-			free(cnySeqFilename);
-		} else
-#endif
-		{
 		sequences = importReadSet(seqFilename);
-		}
 		convertSequences(sequences);
 	}
 

@@ -29,9 +29,7 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #include "tightString.h"
 #include "readSet.h"
 #include "utility.h"
-#if defined(CNY_SEQS) || defined(CNY_WRITER)
-#include "readSetCny.h"
-#endif
+#include "binarySequences.h"
 #if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 #include "../third-party/zlib-1.2.3/Win32/include/zlib.h"
 #else
@@ -680,7 +678,7 @@ void goToEndOfLine(char *line, FILE * file)
 // Imports sequences from a fastq file 
 // Memory space allocated within this function.
 #ifdef CNY_WRITER
-static void readFastQFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, CnyUnifiedSeqWriteInfo *cnySeqWriteInfo)
+static void readFastQFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, BinarySequencesWriter *cnySeqWriteInfo)
 #else
 static void readFastQFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex)
 #endif
@@ -811,7 +809,7 @@ static void readRawFile(FILE* outfile, char *filename, Category cat, IDnum * seq
 // Imports sequences from a zipped rfastq file 
 // Memory space allocated within this function.
 #ifdef CNY_WRITER
-static void readFastQGZFile(FILE * outfile, char *filename, Category cat, IDnum *sequenceIndex, CnyUnifiedSeqWriteInfo *cnySeqWriteInfo)
+static void readFastQGZFile(FILE * outfile, char *filename, Category cat, IDnum *sequenceIndex, BinarySequencesWriter *cnySeqWriteInfo)
 #else
 static void readFastQGZFile(FILE * outfile, char *filename, Category cat, IDnum *sequenceIndex)
 #endif
@@ -993,7 +991,7 @@ static void fillReferenceCoordinateTable(char *filename, ReferenceCoordinateTabl
 // Imports sequences from a fasta file 
 // Memory is allocated within the function 
 #ifdef CNY_WRITER
-static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, ReferenceCoordinateTable * refCoords, CnyUnifiedSeqWriteInfo *cnySeqWriteInfo)
+static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, ReferenceCoordinateTable * refCoords, BinarySequencesWriter *cnySeqWriteInfo)
 #else
 static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, ReferenceCoordinateTable * refCoords)
 #endif
@@ -1204,7 +1202,7 @@ static void readMAQGZFile(FILE* outfile, char *filename, Category cat, IDnum * s
 }
 
 #ifdef CNY_WRITER
-static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords, CnyUnifiedSeqWriteInfo *cnySeqWriteInfo)
+static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords, BinarySequencesWriter *cnySeqWriteInfo)
 #else
 static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords)
 #endif
@@ -1709,14 +1707,9 @@ static void printUsage()
 // General argument parser for most functions
 // Basically a reused portion of toplevel code dumped into here
 // for testing, cnySeqWriteInfo can be set to NULL to force the old style read
-#ifdef CNY_WRITER
-void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * double_strand, CnyUnifiedSeqWriteInfo *cnySeqWriteInfo)
-#else
 void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * double_strand)
-#endif
 {
 	int argIndex = 1;
-	FILE *outfile;
 	int filetype = FASTA;
 	Category cat = 0;
 	IDnum sequenceIndex = 1;
@@ -1745,11 +1738,9 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 		return;
 
 #ifdef CNY_WRITER
-	cnySeqWriteInfo->m_unifiedSeqFileHeader.m_bDoubleStrand = *double_strand;
-	// file is already open
-	outfile = cnySeqWriteInfo->m_pFile;
+	BinarySequencesWriter * cnySeqWriteInfo = openCnySeqForWrite(filename);
 #else
-	outfile = fopen(filename, "w");
+	FILE * outfile = fopen(filename, "w");
 #endif
 
 	for (argIndex = 1; argIndex < argc; argIndex++) {
@@ -2017,6 +2008,12 @@ void exportReadSet(char *filename, ReadSet * reads)
 
 ReadSet *importReadSet(char *filename)
 {
+#ifdef CNV_WRITER
+	return importCnyReadSet(filename);
+#else
+	// THE FOLLOWING IS LEGACY CODE IN CASE THE BINARY STORAGE CODE FAILS
+	// TODO Remove the following when useless
+
 	FILE *file = fopen(filename, "r");
 	char *sequence = NULL;
 	Coordinate bpCount = 0;
@@ -2115,7 +2112,7 @@ ReadSet *importReadSet(char *filename)
 
 	velvetLog("Done\n");
 	return reads;
-
+#endif
 }
 
 void logInstructions(int argc, char **argv, char *directory)

@@ -29,10 +29,6 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #endif
 
 #include "run.h"
-#ifdef CNY_WRITER
-#include "readSetCny.h"
-#include <assert.h>
-#endif
 
 static void printUsage()
 {
@@ -191,31 +187,9 @@ int main(int argc, char **argv)
 		logInstructions(argc, argv, directory);
 
 		strcpy(seqFilename, directory);
-		// if CNY_WRITER is defined, use the CNY unified seq writer
-#ifdef CNY_WRITER
-		CnyUnifiedSeqWriteInfo cnySeqWriteInfo;
-		(void) memset(&cnySeqWriteInfo, 0, sizeof(cnySeqWriteInfo));
-		strcat(seqFilename, "/CnyUnifiedSeq");
-#else
 		strcat(seqFilename, "/Sequences");
-#endif
-
 		if ( h == hashLength ) {
-#ifdef CNY_WRITER
-			cnySeqWriteInfo.m_pWriteBuffer[0] = 0;
-			cnySeqWriteInfo.m_pWriteBuffer[1] = 0;
-			cnySeqWriteInfo.m_pWriteBuffer[2] = 0;
-
-			openCnySeqForWrite(seqFilename, &cnySeqWriteInfo);
-#ifdef COLOR
-			cnySeqWriteInfo.m_unifiedSeqFileHeader.m_bColor = true;
-#else
-			cnySeqWriteInfo.m_unifiedSeqFileHeader.m_bColor = false;
-#endif
-			parseDataAndReadFiles(seqFilename, argc - 2, &(argv[2]), &double_strand, &cnySeqWriteInfo);
-#else
 			parseDataAndReadFiles(seqFilename, argc - 2, &(argv[2]), &double_strand);
-#endif
 		} else {
 			sprintf(buf,"ln -s ../%s_%d/Sequences %s",argv[1],hashLength,seqFilename);
 			system(buf);
@@ -223,13 +197,8 @@ int main(int argc, char **argv)
 
 		splayTable = newSplayTable(h, double_strand);
 
-		if (!allSequences) {
-#ifdef CNY_WRITER
-		    allSequences = importCnyReadSet(seqFilename);
-#else
+		if (!allSequences)
 			allSequences = importReadSet(seqFilename);
-#endif
-		}
 		velvetLog("%li sequences in total.\n", (long) allSequences->readCount);
 
 		strcpy(filename, directory);
@@ -244,14 +213,6 @@ int main(int argc, char **argv)
 			free(directory);
 		free(filename);
 		free(seqFilename);
-#ifdef CNY_WRITER
-		if (cnySeqWriteInfo.m_pWriteBuffer[0])
-		    free(cnySeqWriteInfo.m_pWriteBuffer[0]);
-		if (cnySeqWriteInfo.m_pWriteBuffer[1])
-		    free(cnySeqWriteInfo.m_pWriteBuffer[1]);
-		if (cnySeqWriteInfo.m_pWriteBuffer[2])
-		    free(cnySeqWriteInfo.m_pWriteBuffer[2]);
-#endif
 		free(buf);
 	}
 
