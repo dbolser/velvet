@@ -573,7 +573,7 @@ void cnySeqInsertStart(BinarySequencesWriter *cnySeqWriteInfo)
 }
 
 void cnySeqInsertSequenceName(const char *name, IDnum readID, BinarySequencesWriter *cnySeqWriteInfo) {
-	if (fprintf(cnySeqWriteInfo->p_nameFile, "%s\t%li", name, (long) readID) < 0) {
+	if (fprintf(cnySeqWriteInfo->m_nameFile, "%s\t%li", name, (long) readID) < 0) {
 		velvetLog("Unable to write in name file\n");
 		exit(1);
 	}

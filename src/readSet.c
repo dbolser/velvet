@@ -576,96 +576,6 @@ static int int32(const unsigned char * ptr)
 	return x;
 }
 
-// Imports sequences from a fastq file 
-// Memory space allocated within this function.
-static void readSolexaFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex)
-{
-	FILE *file = fopen(filename, "r");
-	IDnum counter = 0;
-	const int maxline = 500;
-	char line[500];
-	char readName[500];
-	char readSeq[500];
-	char str[100];
-	Coordinate start;
-
-	if (strcmp(filename, "-"))
-		file = fopen(filename, "r");
-	else
-		file = stdin;
-
-	if (file != NULL)
-		velvetLog("Reading Solexa file %s\n", filename);
-	else
-		exitErrorf(EXIT_FAILURE, true, "Could not open %s", filename);
-
-	while (fgets(line, maxline, file) != NULL)
-		if (strchr(line, '.') == NULL) {
-			sscanf(line, "%s\t%*i\t%*i\t%*i\t%*c%[^\n]",
-			       readName, readSeq);
-			velvetFprintf(outfile, ">%s\t%ld\t%d\n", readName, (long) ((*sequenceIndex)++), (int) cat);
-			velvetifySequence(readSeq);
-			start = 0;
-			while (start <= strlen(readSeq)) {
-				strncpy(str, readSeq + start, 60);
-				str[60] = '\0';
-				velvetFprintf(outfile, "%s\n", str);
-				start += 60;
-			}
-
-			counter++;
-		}
-
-	fclose(file);
-
-	velvetLog("%li sequences found\n", (long) counter);
-	velvetLog("Done\n");
-}
-
-static void readElandFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex)
-{
-	FILE *file = fopen(filename, "r");
-	IDnum counter = 0;
-	const int maxline = 5000;
-	char line[5000];
-	char readName[5000];
-	char readSeq[5000];
-	char str[100];
-	Coordinate start;
-
-	if (strcmp(filename, "-"))
-		file = fopen(filename, "r");
-	else
-		file = stdin;
-
-	if (file != NULL)
-		velvetLog("Reading Solexa file %s\n", filename);
-	else
-		exitErrorf(EXIT_FAILURE, true, "Could not open %s", filename);
-
-	// Reopen file and memorize line:
-	while (fgets(line, maxline, file) != NULL) {
-		sscanf(line, "%[^\t]\t%[^\t\n]",
-		       readName, readSeq);
-		velvetFprintf(outfile, ">%s\t%ld\t%d\n", readName, (long) ((*sequenceIndex)++), (int) cat);
-		velvetifySequence(readSeq);
-		start = 0;
-		while (start <= strlen(readSeq)) {
-			strncpy(str, readSeq + start, 60);
-			str[60] = '\0';
-			velvetFprintf(outfile, "%s\n", str);
-			start += 60;
-		}
-
-		counter++;
-	}
-
-	fclose(file);
-
-	velvetLog("%li sequences found\n", (long) counter);
-	velvetLog("Done\n");
-}
-
 void goToEndOfLine(char *line, FILE * file)
 {
 	size_t length = strlen(line);
@@ -1003,9 +913,9 @@ static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * s
 	char line[5000];
 	IDnum counter = 0;
 	char c;
+	Coordinate i;
 #ifndef CNY_WRITER
 	char str[100];
-	Coordinate i;
 	Coordinate start;
 	int offset = 0;
 #endif
@@ -1036,11 +946,12 @@ static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * s
 				cnySeqInsertEnd(cnySeqWriteInfo);
 			}
 			cnySeqInsertStart(cnySeqWriteInfo);
-#endif
+#else
 			if (offset != 0) { 
 				velvetFprintf(outfile, "\n");
 				offset = 0;
 			}
+#endif
 
 			for (i = strlen(line) - 1;
 			     i >= 0 && (line[i] == '\n' || line[i] == '\r'); i--) {
@@ -1159,53 +1070,6 @@ static void readFastAGZFile(FILE* outfile, char *filename, Category cat, IDnum *
 	velvetLog("Done\n");
 }
 
-// Parser for new output
-static void readMAQGZFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex)
-{
-	gzFile file;
-	const int maxline = 1000;
-	char line[1000];
-	IDnum counter = 0;
-	char readName[500];
-	char readSeq[500];
-	char str[100];
-	Coordinate start;
-
-	if (strcmp(filename, "-"))
-		file = gzopen(filename, "rb");
-	else { 
-		file = gzdopen(fileno(stdin), "rb");
-		SET_BINARY_MODE(stdin);
-	}
-
-	if (file != NULL)
-		velvetLog("Reading zipped MAQ file %s\n", filename);
-	else
-		exitErrorf(EXIT_FAILURE, true, "Could not open %s", filename);
-
-	// Reopen file and memorize line:
-	while (gzgets(file, line, maxline)) {
-		sscanf(line, "%s\t%*i\t%*i\t%*c\t%*i\t%*i\t%*i\t%*i\t%*i\t%*i\t%*i\t%*i\t%*i\t%*i\t%[^\t]",
-		       readName, readSeq);
-		velvetFprintf(outfile, ">%s\t%ld\t%d\n", readName, (long) ((*sequenceIndex)++), (int) cat);
-		velvetifySequence(readSeq);
-		start = 0;
-		while (start <= strlen(readSeq)) {
-			strncpy(str, readSeq + start, 60);
-			str[60] = '\0';
-			velvetFprintf(outfile, "%s\n", str);
-			start += 60;
-		}
-
-		counter++;
-	}
-
-	gzclose(file);
-
-	velvetLog("%li sequences found\n", (long) counter);
-	velvetLog("Done\n");
-}
-
 #ifdef CNY_WRITER
 static void readSAMFile(BinarySequencesWriter *cnySeqWriteInfo, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords)
 #else
@@ -1216,7 +1080,7 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 	unsigned long lineno, readCount;
 	char previous_qname_pairing[10];
 	char previous_qname[5000];
-#ifdef CNY_WRTIER
+#ifdef CNY_WRITER
 	char print_qname[5000];
 #endif
 	char previous_seq[5000];
@@ -1723,11 +1587,8 @@ static void printUsage()
 
 #define FASTQ 1
 #define FASTA 2
-#define GERALD 3
-#define ELAND 4
 #define FASTA_GZ 5
 #define FASTQ_GZ 6
-#define MAQ_GZ 7
 #define SAM 8
 #define BAM 9
 #define RAW 10
@@ -1767,6 +1628,7 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 		return;
 
 #ifdef CNY_WRITER
+	FILE * outfile = NULL;
 	BinarySequencesWriter * cnySeqWriteInfo = openCnySeqForWrite(filename);
 #else
 	FILE * outfile = fopen(filename, "w");
@@ -1779,10 +1641,6 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 				filetype = FASTQ;
 			else if (strcmp(argv[argIndex], "-fasta") == 0)
 				filetype = FASTA;
-			else if (strcmp(argv[argIndex], "-gerald") == 0)
-				filetype = GERALD;
-			else if (strcmp(argv[argIndex], "-eland") == 0)
-				filetype = ELAND;
 			else if (strcmp(argv[argIndex], "-fastq.gz") == 0)
 				filetype = FASTQ_GZ;
 			else if (strcmp(argv[argIndex], "-fasta.gz") == 0)
@@ -1795,8 +1653,6 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 				filetype = RAW;
 			else if (strcmp(argv[argIndex], "-raw.gz") == 0)
 				filetype = RAW_GZ;
-			else if (strcmp(argv[argIndex], "-maq.gz") == 0)
-				filetype = MAQ_GZ;
 			else if (strcmp(argv[argIndex], "-short") == 0)
 				cat = 0;
 			else if (strcmp(argv[argIndex], "-shortPaired") ==
@@ -1877,12 +1733,6 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 		case RAW:
 			readRawFile(outfile, argv[argIndex], cat, &sequenceIndex);
 			break;
-		case GERALD:
-			readSolexaFile(outfile, argv[argIndex], cat, &sequenceIndex);
-			break;
-		case ELAND:
-			readElandFile(outfile, argv[argIndex], cat, &sequenceIndex);
-			break;
 		case FASTA_GZ:
 			readFastAGZFile(outfile, argv[argIndex], cat, &sequenceIndex);
 			break;
@@ -1905,9 +1755,6 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 			break;
 		case BAM:
 			readBAMFile(outfile, argv[argIndex], cat, &sequenceIndex, refCoords);
-			break;
-		case MAQ_GZ:
-			readMAQGZFile(outfile, argv[argIndex], cat, &sequenceIndex);
 			break;
 		default:
 			velvetLog("Screw up in parser... exiting\n");
