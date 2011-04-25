@@ -47,19 +47,6 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 
 typedef struct {
 	Category    m_numCategories;
-	uint32_t	m_magic;
-	boolean		m_bColor;
-	uint64_t	m_sequenceCnt;
-	uint64_t	m_timeStamp;
-	uint64_t	m_seqNuclStoreSize;
-	uint64_t	m_minSeqLen;
-	uint64_t	m_maxSeqLen;
-	uint64_t	m_totalSeqLen;
-	boolean		m_bFileWriteCompleted;
-} CnyUnifiedSeqFileHeader;
-
-typedef struct {
-	Category    m_numCategories;
 	Category    m_currCategory;
 	uint64_t	m_minSeqLen;
 	uint64_t	m_maxSeqLen;
@@ -82,26 +69,6 @@ typedef struct {
 #define WRITE_BUF_SIZE					(1<<WRITE_BUF_SHFT)
 #define WRITE_BUF_MASK					(WRITE_BUF_SIZE-1)
 #define SHORT_NUCL_LENGTH				128							// Nucleotide length (2-bits each)
-
-struct binarySequencesWriter_st {
-        FILE *		m_pFile;
-        CnyUnifiedSeqFileHeader m_unifiedSeqFileHeader;
-	uint64_t	m_insertStartIndex;
-	uint64_t	m_insertLength;
-	uint64_t	m_insertLengthIndex;
-	uint64_t	m_insertCurrentIndex;
-	uint32_t	m_hostBuffersInUse;
-	uint32_t	m_fileSegmentWriteIdx;
-	uint8_t	*	m_pWriteBuffer[3];
-	uint8_t *	m_pHostBufPtr;
-	uint8_t *	m_pHostLengthBufPtr;
-	uint8_t *	m_pHostLengthBufPtrMax;
-	uint8_t *	m_pHostBufPtrMax;
-	int64_t		m_hostBufferFilePos[3];
-	int32_t         m_referenceID;
-	int32_t         m_pos;
-	boolean         m_bIsRef;
-};
 
 FILE *openCnySeqForRead(const char *fileName, CnyUnifiedSeqFileHeader *seqFileHeader)
 {
@@ -726,13 +693,6 @@ void cnySeqInsertEnd(BinarySequencesWriter *cnySeqWriteInfo)
 
 void closeCnySeqForWrite(BinarySequencesWriter *cnySeqWriteInfo)
 {
-    if (cnySeqWriteInfo->m_pWriteBuffer[0])
-	free(cnySeqWriteInfo->m_pWriteBuffer[0]);
-    if (cnySeqWriteInfo->m_pWriteBuffer[1])
-	free(cnySeqWriteInfo->m_pWriteBuffer[1]);
-    if (cnySeqWriteInfo->m_pWriteBuffer[2])
-	free(cnySeqWriteInfo->m_pWriteBuffer[2]);
-
     // should be only one buffer in use
     if (cnySeqWriteInfo->m_hostBuffersInUse != 1) {
 	velvetLog("CnySeq host buffers in use %d\n", cnySeqWriteInfo->m_hostBuffersInUse);
@@ -767,4 +727,11 @@ void closeCnySeqForWrite(BinarySequencesWriter *cnySeqWriteInfo)
 	velvetLog("Unable to close CnySeq\n");
 	exit(1);
     }
+
+    if (cnySeqWriteInfo->m_pWriteBuffer[0])
+	free(cnySeqWriteInfo->m_pWriteBuffer[0]);
+    if (cnySeqWriteInfo->m_pWriteBuffer[1])
+	free(cnySeqWriteInfo->m_pWriteBuffer[1]);
+    if (cnySeqWriteInfo->m_pWriteBuffer[2])
+	free(cnySeqWriteInfo->m_pWriteBuffer[2]);
 }

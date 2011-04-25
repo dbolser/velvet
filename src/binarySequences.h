@@ -21,10 +21,42 @@ Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
 #ifndef _BINARYSEQ_H_
 #define _BINARYSEQ_H_
 
+typedef struct {
+	Category    m_numCategories;
+	uint32_t	m_magic;
+	boolean		m_bColor;
+	uint64_t	m_sequenceCnt;
+	uint64_t	m_timeStamp;
+	uint64_t	m_seqNuclStoreSize;
+	uint64_t	m_minSeqLen;
+	uint64_t	m_maxSeqLen;
+	uint64_t	m_totalSeqLen;
+	boolean		m_bFileWriteCompleted;
+} CnyUnifiedSeqFileHeader;
+
 // Reading
 ReadSet *importCnyReadSet(char *filename);
 
 // Writing
+struct binarySequencesWriter_st {
+        FILE *		m_pFile;
+        CnyUnifiedSeqFileHeader m_unifiedSeqFileHeader;
+	uint64_t	m_insertStartIndex;
+	uint64_t	m_insertLength;
+	uint64_t	m_insertLengthIndex;
+	uint64_t	m_insertCurrentIndex;
+	uint32_t	m_hostBuffersInUse;
+	uint32_t	m_fileSegmentWriteIdx;
+	uint8_t	*	m_pWriteBuffer[3];
+	uint8_t *	m_pHostBufPtr;
+	uint8_t *	m_pHostLengthBufPtr;
+	uint8_t *	m_pHostLengthBufPtrMax;
+	uint8_t *	m_pHostBufPtrMax;
+	int64_t		m_hostBufferFilePos[3];
+	int32_t         m_referenceID;
+	int32_t         m_pos;
+	boolean         m_bIsRef;
+};
 typedef struct binarySequencesWriter_st BinarySequencesWriter;
 BinarySequencesWriter * openCnySeqForWrite(const char *unifiedSeqFileName);
 void cnySeqInsertNucleotideString(const char *pReadBuf, BinarySequencesWriter *cnySeqWriteInfo);

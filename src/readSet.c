@@ -1737,10 +1737,12 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 	if (reuseSequences) 
 		return;
 
+	FILE * outfile = NULL;
 #ifdef CNY_WRITER
 	BinarySequencesWriter * cnySeqWriteInfo = openCnySeqForWrite(filename);
+	outfile = cnySeqWriteInfo->m_pFile;
 #else
-	FILE * outfile = fopen(filename, "w");
+	outfile = fopen(filename, "w");
 #endif
 
 	for (argIndex = 1; argIndex < argc; argIndex++) {
@@ -2008,7 +2010,7 @@ void exportReadSet(char *filename, ReadSet * reads)
 
 ReadSet *importReadSet(char *filename)
 {
-#ifdef CNV_WRITER
+#ifdef CNY_WRITER
 	return importCnyReadSet(filename);
 #else
 	// THE FOLLOWING IS LEGACY CODE IN CASE THE BINARY STORAGE CODE FAILS
