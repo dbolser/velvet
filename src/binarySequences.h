@@ -40,6 +40,7 @@ ReadSet *importCnyReadSet(char *filename);
 // Writing
 struct binarySequencesWriter_st {
         FILE *		m_pFile;
+	FILE *		m_nameFile;
         CnyUnifiedSeqFileHeader m_unifiedSeqFileHeader;
 	uint64_t	m_insertStartIndex;
 	uint64_t	m_insertLength;
@@ -59,6 +60,7 @@ struct binarySequencesWriter_st {
 };
 typedef struct binarySequencesWriter_st BinarySequencesWriter;
 BinarySequencesWriter * openCnySeqForWrite(const char *unifiedSeqFileName);
+void cnySeqInsertSequenceName(const char *name, IDnum readID, BinarySequencesWriter *cnySeqWriteInfo); 
 void cnySeqInsertNucleotideString(const char *pReadBuf, BinarySequencesWriter *cnySeqWriteInfo);
 void inputCnySeqFileStart(Category category, BinarySequencesWriter *cnySeqWriteInfo);
 void cnySeqInsertStart(BinarySequencesWriter *cnySeqWriteInfo);

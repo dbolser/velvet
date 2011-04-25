@@ -462,6 +462,10 @@ BinarySequencesWriter * openCnySeqForWrite(const char *unifiedSeqFileName)
     cnySeqWriteInfo->m_pWriteBuffer[0] = NULL;
     cnySeqWriteInfo->m_pWriteBuffer[1] = NULL;
     cnySeqWriteInfo->m_pWriteBuffer[2] = NULL;
+    char seqNamesFileName[5000];
+
+    strcpy(seqNamesFileName, unifiedSeqFileName);
+    strcat(seqNamesFileName, ".names");
 
 #ifdef COLOR
     cnySeqWriteInfo->m_unifiedSeqFileHeader.m_bColor = true;
@@ -471,6 +475,11 @@ BinarySequencesWriter * openCnySeqForWrite(const char *unifiedSeqFileName)
 
     if ((cnySeqWriteInfo->m_pFile = fopen(unifiedSeqFileName, "wb")) == 0) {
 	velvetLog("Unable to open %s for writing\n", unifiedSeqFileName);
+	exit(1);
+    }
+
+    if ((cnySeqWriteInfo->m_nameFile = fopen(seqNamesFileName, "w")) == 0) {
+	velvetLog("Unable to open %s for writing\n", seqNamesFileName);
 	exit(1);
     }
 
@@ -561,6 +570,13 @@ void cnySeqInsertStart(BinarySequencesWriter *cnySeqWriteInfo)
 	cnySeqHostBufferFull(cnySeqWriteInfo);
     }
 
+}
+
+void cnySeqInsertSequenceName(const char *name, IDnum readID, BinarySequencesWriter *cnySeqWriteInfo) {
+	if (fprintf(cnySeqWriteInfo->p_nameFile, "%s\t%li", name, (long) readID) < 0) {
+		velvetLog("Unable to write in name file\n");
+		exit(1);
+	}
 }
 
 void cnySeqInsertEnd(BinarySequencesWriter *cnySeqWriteInfo)
@@ -725,6 +741,11 @@ void closeCnySeqForWrite(BinarySequencesWriter *cnySeqWriteInfo)
 
     if (fclose(cnySeqWriteInfo->m_pFile) < 0) {
 	velvetLog("Unable to close CnySeq\n");
+	exit(1);
+    }
+
+    if (fclose(cnySeqWriteInfo->m_nameFile) < 0) {
+	velvetLog("Unable to close name file\n");
 	exit(1);
     }
 

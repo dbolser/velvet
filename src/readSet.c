@@ -678,7 +678,7 @@ void goToEndOfLine(char *line, FILE * file)
 // Imports sequences from a fastq file 
 // Memory space allocated within this function.
 #ifdef CNY_WRITER
-static void readFastQFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, BinarySequencesWriter *cnySeqWriteInfo)
+static void readFastQFile(BinarySequencesWriter *cnySeqWriteInfo, char *filename, Category cat, IDnum * sequenceIndex)
 #else
 static void readFastQFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex)
 #endif
@@ -725,6 +725,7 @@ static void readFastQFile(FILE* outfile, char *filename, Category cat, IDnum * s
 			cnySeqInsertEnd(cnySeqWriteInfo);
 		}
 		cnySeqInsertStart(cnySeqWriteInfo);
+		cnySeqInsertSequenceName(line + 1, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 		velvetFprintf(outfile,">%s\t%ld\t%d\n", line + 1, (long) ((*sequenceIndex)++), (int) cat);
 #endif
@@ -809,7 +810,7 @@ static void readRawFile(FILE* outfile, char *filename, Category cat, IDnum * seq
 // Imports sequences from a zipped rfastq file 
 // Memory space allocated within this function.
 #ifdef CNY_WRITER
-static void readFastQGZFile(FILE * outfile, char *filename, Category cat, IDnum *sequenceIndex, BinarySequencesWriter *cnySeqWriteInfo)
+static void readFastQGZFile(BinarySequencesWriter *cnySeqWriteInfo, char *filename, Category cat, IDnum *sequenceIndex)
 #else
 static void readFastQGZFile(FILE * outfile, char *filename, Category cat, IDnum *sequenceIndex)
 #endif
@@ -858,6 +859,7 @@ static void readFastQGZFile(FILE * outfile, char *filename, Category cat, IDnum 
 			cnySeqInsertEnd(cnySeqWriteInfo);
 		}
 		cnySeqInsertStart(cnySeqWriteInfo);
+		cnySeqInsertSequenceName(line + 1, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 		velvetFprintf(outfile,">%s\t%ld\t%d\n", line + 1, (long) ((*sequenceIndex)++), (int) cat);
 #endif
@@ -991,7 +993,7 @@ static void fillReferenceCoordinateTable(char *filename, ReferenceCoordinateTabl
 // Imports sequences from a fasta file 
 // Memory is allocated within the function 
 #ifdef CNY_WRITER
-static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, ReferenceCoordinateTable * refCoords, BinarySequencesWriter *cnySeqWriteInfo)
+static void readFastAFile(BinarySequencesWriter *cnySeqWriteInfo, char *filename, Category cat, IDnum * sequenceIndex, ReferenceCoordinateTable * refCoords)
 #else
 static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * sequenceIndex, ReferenceCoordinateTable * refCoords)
 #endif
@@ -1034,7 +1036,7 @@ static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * s
 				cnySeqInsertEnd(cnySeqWriteInfo);
 			}
 			cnySeqInsertStart(cnySeqWriteInfo);
-#else
+#endif
 			if (offset != 0) { 
 				velvetFprintf(outfile, "\n");
 				offset = 0;
@@ -1045,6 +1047,9 @@ static void readFastAFile(FILE* outfile, char *filename, Category cat, IDnum * s
 				line[i] = '\0';
 			}
 
+#ifdef CNY_WRITER
+			cnySeqInsertSequenceName(line, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
+#else
 			velvetFprintf(outfile,"%s\t%ld\t%d\n", line, (long) ((*sequenceIndex)++), (int) cat);
 #endif
 			counter++;
@@ -1202,7 +1207,7 @@ static void readMAQGZFile(FILE* outfile, char *filename, Category cat, IDnum * s
 }
 
 #ifdef CNY_WRITER
-static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords, BinarySequencesWriter *cnySeqWriteInfo)
+static void readSAMFile(BinarySequencesWriter *cnySeqWriteInfo, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords)
 #else
 static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequenceIndex, ReferenceCoordinateTable * refCoords)
 #endif
@@ -1211,6 +1216,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 	unsigned long lineno, readCount;
 	char previous_qname_pairing[10];
 	char previous_qname[5000];
+#ifdef CNY_WRTIER
+	char print_qname[5000];
+#endif
 	char previous_seq[5000];
 	char previous_rname[5000];
 	long long previous_pos = -1;
@@ -1290,6 +1298,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 							// Last read paired to penultimate read
 #ifdef CNY_WRITER
 							cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+							strcpy(print_qname, previous_qname);
+							strcat(print_qname, previous_qname_pairing);
+							cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 							velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 								(long) ((*sequenceIndex)++), (int) cat);
@@ -1303,6 +1314,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 							// Last read paired to current reads
 #ifdef CNY_WRITER
 							cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+							strcpy(print_qname, previous_qname);
+							strcat(print_qname, previous_qname_pairing);
+							cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 							velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 								(long) ((*sequenceIndex)++), (int) cat);
@@ -1313,6 +1327,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 							// Last read unpaired
 #ifdef CNY_WRITER
 							cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+							strcpy(print_qname, previous_qname);
+							strcat(print_qname, previous_qname_pairing);
+							cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 							velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 								(long) ((*sequenceIndex)++), (int) cat - 1);
@@ -1324,6 +1341,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 						// Unpaired dataset 
 #ifdef CNY_WRITER
 						cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+						strcpy(print_qname, previous_qname);
+						strcat(print_qname, previous_qname_pairing);
+						cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 						velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 							(long) ((*sequenceIndex)++), (int) cat);
@@ -1377,6 +1397,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 				// Last read paired to penultimate read
 #ifdef CNY_WRITER
 				cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+				strcpy(print_qname, previous_qname);
+				strcat(print_qname, previous_qname_pairing);
+				cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 				velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 					(long) ((*sequenceIndex)++), (int) cat);
@@ -1386,6 +1409,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 				// Last read unpaired
 #ifdef CNY_WRITER
 				cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+				strcpy(print_qname, previous_qname);
+				strcat(print_qname, previous_qname_pairing);
+				cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 				velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 					(long) ((*sequenceIndex)++), (int) cat - 1);
@@ -1396,6 +1422,9 @@ static void readSAMFile(FILE *outfile, char *filename, Category cat, IDnum *sequ
 			// Unpaired dataset 
 #ifdef CNY_WRITER
 			cnySeqInsertNucleotideString(previous_seq, cnySeqWriteInfo);
+			strcpy(print_qname, previous_qname);
+			strcat(print_qname, previous_qname_pairing);
+			cnySeqInsertSequenceName(print_qname, (long) ((*sequenceIndex)++), cnySeqWriteInfo); 
 #else
 			velvetFprintf(outfile, ">%s%s\t%ld\t%d\n", previous_qname, previous_qname_pairing,
 				(long) ((*sequenceIndex)++), (int) cat);
@@ -1737,12 +1766,10 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 	if (reuseSequences) 
 		return;
 
-	FILE * outfile = NULL;
 #ifdef CNY_WRITER
 	BinarySequencesWriter * cnySeqWriteInfo = openCnySeqForWrite(filename);
-	outfile = cnySeqWriteInfo->m_pFile;
 #else
-	outfile = fopen(filename, "w");
+	FILE * outfile = fopen(filename, "w");
 #endif
 
 	for (argIndex = 1; argIndex < argc; argIndex++) {
@@ -1835,14 +1862,14 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 		switch (filetype) {
 		case FASTA:
 #ifdef CNY_WRITER
-			readFastAFile(outfile, argv[argIndex], cat, &sequenceIndex, refCoords, cnySeqWriteInfo);
+			readFastAFile(cnySeqWriteInfo, argv[argIndex], cat, &sequenceIndex, refCoords);
 #else
 			readFastAFile(outfile, argv[argIndex], cat, &sequenceIndex, refCoords);
 #endif
 			break;
 		case FASTQ:
 #ifdef CNY_WRITER
-			readFastQFile(outfile, argv[argIndex], cat, &sequenceIndex, cnySeqWriteInfo);
+			readFastQFile(cnySeqWriteInfo, argv[argIndex], cat, &sequenceIndex);
 #else
 			readFastQFile(outfile, argv[argIndex], cat, &sequenceIndex);
 #endif
@@ -1861,7 +1888,7 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 			break;
 		case FASTQ_GZ:
 #ifdef CNY_WRITER
-			readFastQGZFile(outfile, argv[argIndex], cat, &sequenceIndex, cnySeqWriteInfo);
+			readFastQGZFile(cnySeqWriteInfo, argv[argIndex], cat, &sequenceIndex);
 #else
 			readFastQGZFile(outfile, argv[argIndex], cat, &sequenceIndex);
 #endif
@@ -1871,7 +1898,7 @@ void parseDataAndReadFiles(char * filename, int argc, char **argv, boolean * dou
 			break;
 		case SAM:
 #ifdef CNY_WRITER
-			readSAMFile(outfile, argv[argIndex], cat, &sequenceIndex, refCoords, cnySeqWriteInfo);
+			readSAMFile(cnySeqWriteInfo, argv[argIndex], cat, &sequenceIndex, refCoords);
 #else
 			readSAMFile(outfile, argv[argIndex], cat, &sequenceIndex, refCoords);
 #endif
